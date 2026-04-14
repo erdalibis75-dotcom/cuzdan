@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cüzdan Asistanı</title>
+    <!-- Kütüphaneleri direkt yüklüyoruz -->
+    <script src="https://unpkg.com"></script>
+    <script src="https://unpkg.com"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background: #0a0a0c; color: #ededee; overflow-x: hidden; }
+        #root { max-width: 500px; margin: 0 auto; min-height: 100vh; padding-bottom: 90px; }
+        .card { background: #121216; border: 1px solid #1f1f24; border-radius: 20px; padding: 15px; margin: 10px; }
+        .tx-row { display: flex; justify-content: space-between; align-items: center; padding: 14px; border-radius: 15px; background: #121216; margin: 8px 10px; border: 1px solid #1f1f24; }
+        .input-field { width: 100%; background: #18181c; border-radius: 15px; padding: 12px; color: #fff; border: 1px solid #2a2a30; margin-bottom: 10px; font-size: 16px; }
+        .btn { background: #7c3aed; color: white; border: none; padding: 14px; border-radius: 15px; width: 100%; font-weight: bold; cursor: pointer; }
+        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #0c0c10; display: flex; justify-content: space-around; padding: 15px; border-top: 1px solid #222; max-width: 500px; margin: 0 auto; }
+        .nav-btn { color: #8e8e98; background: none; border: none; font-size: 12px; cursor: pointer; }
+        .active { color: #c084fc; }
+        .floating-btn { position: fixed; bottom: 80px; right: 20px; width: 56px; height: 56px; border-radius: 28px; background: #7c3aed; color: white; border: none; font-size: 28px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        .aud { font-size: 10px; background: #0f1a22; color: #5bc4f5; padding: 2px 6px; border-radius: 5px; border: 1px solid #1e4a6e; display: inline-block; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        const { useState, useEffect } = React;
+        const PEOPLE = ["Erdal", "A.A", "N.A"];
+
+        function App() {
+            const [view, setView] = useState('home');
+            const [rate, setRate] = useState(0.045);
+            const [txs, setTxs] = useState(() => JSON.parse(localStorage.getItem("wallet_v4")) || []);
+            const [form, setForm] = useState({ type: 'expense', person: 'Erdal', amount: '', note: '', date: new Date().toISOString().split('T')[0] });
+
+            useEffect(() => { localStorage.setItem("wallet_v4", JSON.stringify(txs)); }, [txs]);
+            
+            useEffect(() => {
+                fetch("https://frankfurter.app")
+                    .then(res => res.json()).then(data => data.rates.AUD && setRate(data.rates.AUD))
+                    .catch(() => console.log("Kur hatası"));
+            }, []);
+
+            const handleSave = () => {
+                if(!form.amount || !form.note) return alert("Boş alan bırakma!");
+                setTxs([{...form, id: Date.now(), amount: parseFloat(form.amount)}, ...txs]);
+                setForm({ ...form, amount: '', note: '' });
+                setView('home');
+            };
+
+            const totals = txs.reduce((a, c) => { a[c.type] += c.amount; return a; }, { income: 0, expense: 0 });
+            const format = (v) => new Intl.NumberFormat('tr-TR', {style:'currency', currency:'TRY'}).format(v);
+
+            return React.createElement('div', null,
+                view === 'home' ? React.createElement('div', null,
+                    React.createElement('div', {className: 'card'},
+                        React.createElement('p', {style: {color: '#8e8e98'}}, 'Net Bakiye'),
+                        React.createElement('h1', {style: {fontSize: '32px'}}, format(totals.income - totals.expense)),
+                        React.createElement('div', {className: 'aud'}, '≈ ' + ((totals.income - totals.expense) * rate).toFixed(2) + ' AUD')
+                    ),
+                    React.createElement('div', {style: {display: 'flex', gap: '10px', padding: '0 10px'}},
+                        React.createElement('div', {className: 'card', style: {flex:1, borderColor:'#10b98133'}}, 
+                            React.createElement('p', {style:{color:'#10b981', fontSize:'12px'}}, 'Gelir'),
+                            React.createElement('b', null, totals.income + ' ₺')
+                        ),
+                        React.createElement('div', {className: 'card', style: {flex:1, borderColor:'#ef444433'}}, 
+                            React.createElement('p', {style:{color:'#ef4444', fontSize:'12px'}}, 'Gider'),
+                            React.createElement('b', null, totals.expense + ' ₺')
+                        )
+                    ),
+                    React.createElement('h3', {style: {margin: '20px 15px 10px'}}, 'Son İşlemler'),
+                    txs.map(t => React.createElement('div', {className: 'tx-row', key: t.id},
+                        React.createElement('span', null, 
+                            t.note, 
+                            React.createElement('br'), 
+                            React.createElement('small', {style: {color: '#8e8e98'}}, t.person)
+                        ),
+                        React.createElement('b', {style: {color: t.type === 'income' ? '#34d399' : '#f87171'}}, 
+                            (t.type === 'income' ? '+' : '-') + t.amount + ' ₺'
+                        )
+                    )),
+                    React.createElement('button', {className: 'floating-btn', onClick: () => setView('add')}, '+')
+                ) : React.createElement('div', {style: {padding: '20px'}},
+                    React.createElement('h2', null, 'Yeni İşlem'),
+                    React.createElement('div', {style: {display:'flex', gap:'10px', margin:'20px 0'}},
+                        React.createElement('button', {className: 'btn', style: {background: form.type === 'income' ? '#34d399':'#121216'}, onClick:()=>setForm({...form, type:'income'})}, 'Gelir'),
+                        React.createElement('button', {className: 'btn', style: {background: form.type === 'expense' ? '#f87171':'#121216'}, onClick:()=>setForm({...form, type:'expense'})}, 'Gider')
+                    ),
+                    React.createElement('select', {className: 'input-field', value: form.person, onChange: e=>setForm({...form, person: e.target.value})}, 
+                        PEOPLE.map(p => React.createElement('option', {key: p, value: p}, p))
+                    ),
+                    React.createElement('input', {type: 'number', placeholder: 'Tutar', className: 'input-field', value: form.amount, onChange: e=>setForm({...form, amount: e.target.value})}),
+                    React.createElement('input', {type: 'text', placeholder: 'Açıklama', className: 'input-field', value: form.note, onChange: e=>setForm({...form, note: e.target.value})}),
+                    React.createElement('button', {className: 'btn', onClick: handleSave}, 'Kaydet'),
+                    React.createElement('button', {className: 'btn', style: {background:'none', color:'#888', marginTop:'10px'}, onClick:()=>setView('home')}, 'Vazgeç')
+                ),
+                React.createElement('nav', {className: 'bottom-nav'},
+                    React.createElement('button', {className: 'nav-btn' + (view
+                    ==='home'?' active':''), onClick:()=>setView('home')}, '🏠 Ana Sayfa'),
+                    React.createElement('button', {className: 'nav-btn', onClick:()=>alert("Geçmiş yakında!")}, '📊 Geçmiş')
+                )
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById("root"));
+        root.render(React.createElement(App));
+    </script>
+</body>
+</html>
