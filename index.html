@@ -236,66 +236,88 @@ const App = () => {
       currentMonthData.transactions.sort((a, b) => new Date(b.date) - new Date(a.date)).map(tx => React.createElement(TransactionRow, { key: tx.id, tx: tx, onClick: t => setDetailModal(t) }))
     );
   };
- const AddView = () => React.createElement("div", { className: "slide-up", style: { padding: "0 18px" } }, 
-    React.createElement("div", { className: "card", style: { padding: 26 } }, 
-      React.createElement("h3", { style: { marginBottom: 16 } }, editId ? "✏️ Düzenle" : "➕ Yeni İşlem"),
-      React.createElement("select", { className: "input-field", value: formType, onChange: e => setFormType(e.target.value) }, 
-        React.createElement("option", { value: "income" }, "💰 Gelir"), 
-        React.createElement("option", { value: "expense" }, "💸 Gider")
-      ),
-      React.createElement("select", { className: "input-field", value: formPerson, onChange: e => setFormPerson(e.target.value) }, 
-        PEOPLE.map(p => React.createElement("option", { key: p, value: p }, p))
-      ),
-      React.createElement("input", { 
-        type: "number", 
-        className: "input-field", 
-        placeholder: "₺ Tutar", 
-        value: formAmount, 
-        onChange: e => setFormAmount(e.target.value),
-        onKeyDown: (e) => e.stopPropagation()
-      }),
-      React.createElement("input", { 
-        className: "input-field", 
-        placeholder: "📝 Not (maaş, kira, market...)", 
-        value: formNote, 
-        onChange: e => setFormNote(e.target.value) 
-      }),
-      React.createElement("input", { 
-        type: "date", 
-        className: "input-field", 
-        value: formDate, 
-        onChange: e => setFormDate(e.target.value) 
-      }),
-      React.createElement("div", { style: { display: "flex", gap: 12, marginTop: 16 } }, 
-        React.createElement("button", { className: "btn", onClick: submitTx, style: { flex: 1, background: "#7c3aed", padding: 14, borderRadius: 60 } }, "Kaydet"),
-        React.createElement("button", { className: "btn", onClick: goHome, style: { flex: 1, background: "#2a2a32", padding: 14, borderRadius: 60 } }, "İptal")
+ const AddView = () => {
+    return React.createElement("div", { className: "slide-up", style: { padding: "0 18px" } },
+      React.createElement("div", { className: "card", style: { padding: 26 } },
+        React.createElement("h3", { style: { marginBottom: 16 } }, editId ? "✏️ Düzenle" : "➕ Yeni İşlem"),
+        React.createElement("select", { className: "input-field", value: formType, onChange: e => setFormType(e.target.value) },
+          React.createElement("option", { value: "income" }, "💰 Gelir"),
+          React.createElement("option", { value: "expense" }, "💸 Gider")
+        ),
+        React.createElement("select", { className: "input-field", value: formPerson, onChange: e => setFormPerson(e.target.value) },
+          PEOPLE.map(p => React.createElement("option", { key: p, value: p }, p))
+        ),
+        React.createElement("input", { type: "number", className: "input-field", placeholder: "₺ Tutar", value: formAmount, onChange: e => setFormAmount(e.target.value) }),
+        React.createElement("input", { className: "input-field", placeholder: "📝 Not (maaş, kira, market...)", value: formNote, onChange: e => setFormNote(e.target.value) }),
+        React.createElement("input", { type: "date", className: "input-field", value: formDate, onChange: e => setFormDate(e.target.value) }),
+        React.createElement("div", { style: { display: "flex", gap: 12, marginTop: 16 } },
+          React.createElement("button", { className: "btn", onClick: submitTx, style: { flex: 1, background: "#7c3aed", padding: 14, borderRadius: 60 } }, "Kaydet"),
+          React.createElement("button", { className: "btn", onClick: goHome, style: { flex: 1, background: "#2a2a32", padding: 14, borderRadius: 60 } }, "İptal")
+        )
       )
-    )
-  );
+    );
+  };
   
   const DetailModal = () => {
     if (!detailModal) return null;
-    return React.createElement("div", { className: "modal-overlay", onClick: () => setDetailModal(null) }, React.createElement("div", { className: "modal-card", onClick: e => e.stopPropagation() }, React.createElement("div", { style: { fontWeight: 800, fontSize: 22 } }, detailModal.type === "income" ? "Gelir Detayı" : "Gider Detayı"), React.createElement("div", { style: { fontSize: 32, fontFamily: "monospace", fontWeight: 800, margin: "10px 0", color: detailModal.type === "income" ? "#34d399" : "#f87171" } }, formatTRY(detailModal.amount)), React.createElement("div", { className: "aud-badge", style: { marginBottom: 14 } }, `🇦🇺 ${formatAUD(toAUD(detailModal.amount))}`), React.createElement("div", { style: { background: "#1c1c24", borderRadius: 24, padding: 16, marginBottom: 20 } }, React.createElement("div", null, `👤 Kişi: ${detailModal.person}`), React.createElement("div", { className: "mt-2" }, `📅 Tarih: ${new Date(detailModal.date).toLocaleDateString("tr-TR")}`), React.createElement("div", { className: "mt-2" }, `📝 Not: ${detailModal.note || "—"}`)), React.createElement("div", { style: { display: "flex", gap: 12 } }, React.createElement("button", { className: "btn", style: { flex: 1, background: "#2c5f5f", padding: 12, borderRadius: 40 }, onClick: () => { openEdit(detailModal); setDetailModal(null); } }, "✏️ Düzenle"), React.createElement("button", { className: "btn", style: { flex: 1, background: "#6b2e2e", padding: 12, borderRadius: 40 }, onClick: () => deleteTx(detailModal.id) }, "🗑️ Sil"), React.createElement("button", { className: "btn", style: { background: "#2c2c36", padding: "12px 18px", borderRadius: 40 }, onClick: () => setDetailModal(null) }, "Kapat"))));
+    return React.createElement("div", { className: "modal-overlay", onClick: () => setDetailModal(null) },
+      React.createElement("div", { className: "modal-card", onClick: e => e.stopPropagation() },
+        React.createElement("div", { style: { fontWeight: 800, fontSize: 22 } }, detailModal.type === "income" ? "Gelir Detayı" : "Gider Detayı"),
+        React.createElement("div", { style: { fontSize: 32, fontFamily: "monospace", fontWeight: 800, margin: "10px 0", color: detailModal.type === "income" ? "#34d399" : "#f87171" } }, formatTRY(detailModal.amount)),
+        React.createElement("div", { className: "aud-badge", style: { marginBottom: 14 } }, `🇦🇺 ${formatAUD(toAUD(detailModal.amount))}`),
+        React.createElement("div", { style: { background: "#1c1c24", borderRadius: 24, padding: 16, marginBottom: 20 } },
+          React.createElement("div", null, `👤 Kişi: ${detailModal.person}`),
+          React.createElement("div", { className: "mt-2" }, `📅 Tarih: ${new Date(detailModal.date).toLocaleDateString("tr-TR")}`),
+          React.createElement("div", { className: "mt-2" }, `📝 Not: ${detailModal.note || "—"}`)
+        ),
+        React.createElement("div", { style: { display: "flex", gap: 12 } },
+          React.createElement("button", { className: "btn", style: { flex: 1, background: "#2c5f5f", padding: 12, borderRadius: 40 }, onClick: () => { openEdit(detailModal); setDetailModal(null); } }, "✏️ Düzenle"),
+          React.createElement("button", { className: "btn", style: { flex: 1, background: "#6b2e2e", padding: 12, borderRadius: 40 }, onClick: () => deleteTx(detailModal.id) }, "🗑️ Sil"),
+          React.createElement("button", { className: "btn", style: { background: "#2c2c36", padding: "12px 18px", borderRadius: 40 }, onClick: () => setDetailModal(null) }, "Kapat")
+        )
+      )
+    );
   };
   
   const Header = () => {
     if (view === "add") return null;
-    return React.createElement("div", { style: { padding: "20px 18px 10px" } }, React.createElement("div", { className: "flex-between" }, React.createElement("div", null, React.createElement("div", { style: { fontSize: 10, fontWeight: 800, color: "#a78bfa", letterSpacing: 1 } }, "BÜTÇE ASİSTANI"), React.createElement("div", { style: { fontSize: 22, fontWeight: 800 } }, view === "person" && selectedPerson ? `${selectedPerson} · Detay` : view === "month" ? "📅 Ay Özeti" : "Cüzdan")), React.createElement("div", { style: { display: "flex", gap: 6, background: "#15151c", padding: "5px 12px", borderRadius: 40 } }, React.createElement("span", null, "🇦🇺"), React.createElement("span", { style: { fontFamily: "monospace", fontSize: 12 } }, rateLoading ? "..." : `A$${rate.toFixed(5)}`), React.createElement("button", { className: "btn", onClick: async () => { setRateLoading(true); try { const r = await fetch("https://api.frankfurter.app/latest?from=TRY&to=AUD"); const d = await r.json(); if (d.rates?.AUD) setRate(d.rates.AUD); } catch(e) {} finally { setRateLoading(false); } }, style: { fontSize: 12 } }, "⟳"))));
+    return React.createElement("div", { style: { padding: "20px 18px 10px" } },
+      React.createElement("div", { className: "flex-between" },
+        React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 10, fontWeight: 800, color: "#a78bfa", letterSpacing: 1 } }, "BÜTÇE ASİSTANI"),
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 800 } }, view === "person" && selectedPerson ? `${selectedPerson} · Detay` : view === "month" ? "📅 Ay Özeti" : "Cüzdan")
+        ),
+        React.createElement("div", { style: { display: "flex", gap: 6, background: "#15151c", padding: "5px 12px", borderRadius: 40 } },
+          React.createElement("span", null, "🇦🇺"),
+          React.createElement("span", { style: { fontFamily: "monospace", fontSize: 12 } }, rateLoading ? "..." : `A$${rate.toFixed(5)}`),
+          React.createElement("button", { className: "btn", onClick: async () => { setRateLoading(true); try { const r = await fetch("https://api.frankfurter.app/latest?from=TRY&to=AUD"); const d = await r.json(); if (d.rates?.AUD) setRate(d.rates.AUD); } catch(e) {} finally { setRateLoading(false); } }, style: { fontSize: 12 } }, "⟳")
+        )
+      )
+    );
   };
   
   const BottomNav = () => React.createElement("div", { className: "bottom-nav" },
     React.createElement("button", { className: `nav-btn ${view === "home" ? "nav-active" : ""}`, onClick: goHome }, React.createElement("span", { style: { fontSize: 22 } }, "🏠"), React.createElement("span", null, "Ana Sayfa")),
-    React.createElement("button", { className: "nav-btn", onClick: () => { openAdd(); } }, React.createElement("span", { style: { fontSize: 22 } }, "➕"), React.createElement("span", null, "Ekle")),
+    React.createElement("button", { className: "nav-btn", onClick: openAdd }, React.createElement("span", { style: { fontSize: 22 } }, "➕"), React.createElement("span", null, "Ekle")),
     React.createElement("button", { className: "nav-btn", onClick: exportData }, React.createElement("span", { style: { fontSize: 22 } }, "💾"), React.createElement("span", null, "Yedek Al")),
     React.createElement("label", { className: "nav-btn", style: { cursor: "pointer" } }, React.createElement("span", { style: { fontSize: 22 } }, "📂"), React.createElement("span", null, "Yedek Yükle"), React.createElement("input", { type: "file", accept: ".json", ref: fileInputRef, onChange: importData, style: { display: "none" } }))
   );
   
-  return React.createElement("div", null, React.createElement(Header, null), view === "home" && React.createElement(HomeView, null), view === "person" && React.createElement(PersonView, null), view === "month" && React.createElement(MonthView, null), view === "add" && React.createElement(AddView, null), React.createElement(DetailModal, null), React.createElement(BottomNav, null), view !== "add" && React.createElement("button", { className: "floating-btn", onClick: openAdd }, "+"), React.createElement(Toast, null));
+  return React.createElement("div", null,
+    React.createElement(Header, null),
+    view === "home" && React.createElement(HomeView, null),
+    view === "person" && React.createElement(PersonView, null),
+    view === "month" && React.createElement(MonthView, null),
+    view === "add" && React.createElement(AddView, null),
+    React.createElement(DetailModal, null),
+    React.createElement(BottomNav, null),
+    view !== "add" && React.createElement("button", { className: "floating-btn", onClick: openAdd }, "+"),
+    React.createElement(Toast, null)
+  );
 };
 
 ReactDOM.render(React.createElement(App, null), document.getElementById("root"));
 </script>
 </body>
 </html>
-  
   
