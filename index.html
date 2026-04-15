@@ -236,8 +236,42 @@ const App = () => {
       currentMonthData.transactions.sort((a, b) => new Date(b.date) - new Date(a.date)).map(tx => React.createElement(TransactionRow, { key: tx.id, tx: tx, onClick: t => setDetailModal(t) }))
     );
   };
-  
-  const AddView = () => React.createElement("div", { className: "slide-up", style: { padding: "0 18px" } }, React.createElement("div", { className: "card", style: { padding: 26 } }, React.createElement("h3", { style: { marginBottom: 16 } }, editTarget ? "✏️ Düzenle" : "➕ Yeni İşlem"), React.createElement("select", { className: "input-field", value: form.type, onChange: e => setForm({ ...form, type: e.target.value }) }, React.createElement("option", { value: "income" }, "💰 Gelir"), React.createElement("option", { value: "expense" }, "💸 Gider")), React.createElement("select", { className: "input-field", value: form.person, onChange: e => setForm({ ...form, person: e.target.value }) }, PEOPLE.map(p => React.createElement("option", { key: p, value: p }, p))), React.createElement("input", { className: "input-field", type: "number", placeholder: "₺ Tutar", value: form.amount, onChange: e => setForm({ ...form, amount: e.target.value }) }), React.createElement("input", { className: "input-field", placeholder: "📝 Not (maaş, kira, market...)", value: form.note, onChange: e => setForm({ ...form, note: e.target.value }) }), React.createElement("input", { className: "input-field", type: "date", value: form.date, onChange: e => setForm({ ...form, date: e.target.value }) }), React.createElement("div", { style: { display: "flex", gap: 12, marginTop: 16 } }, React.createElement("button", { className: "btn", onClick: submitTx, style: { flex: 1, background: "#7c3aed", padding: 14, borderRadius: 60 } }, "Kaydet"), React.createElement("button", { className: "btn", onClick: goHome, style: { flex: 1, background: "#2a2a32", padding: 14, borderRadius: 60 } }, "İptal"))));
+ const AddView = () => React.createElement("div", { className: "slide-up", style: { padding: "0 18px" } }, 
+    React.createElement("div", { className: "card", style: { padding: 26 } }, 
+      React.createElement("h3", { style: { marginBottom: 16 } }, editId ? "✏️ Düzenle" : "➕ Yeni İşlem"),
+      React.createElement("select", { className: "input-field", value: formType, onChange: e => setFormType(e.target.value) }, 
+        React.createElement("option", { value: "income" }, "💰 Gelir"), 
+        React.createElement("option", { value: "expense" }, "💸 Gider")
+      ),
+      React.createElement("select", { className: "input-field", value: formPerson, onChange: e => setFormPerson(e.target.value) }, 
+        PEOPLE.map(p => React.createElement("option", { key: p, value: p }, p))
+      ),
+      React.createElement("input", { 
+        type: "number", 
+        className: "input-field", 
+        placeholder: "₺ Tutar", 
+        value: formAmount, 
+        onChange: e => setFormAmount(e.target.value),
+        onKeyDown: (e) => e.stopPropagation()
+      }),
+      React.createElement("input", { 
+        className: "input-field", 
+        placeholder: "📝 Not (maaş, kira, market...)", 
+        value: formNote, 
+        onChange: e => setFormNote(e.target.value) 
+      }),
+      React.createElement("input", { 
+        type: "date", 
+        className: "input-field", 
+        value: formDate, 
+        onChange: e => setFormDate(e.target.value) 
+      }),
+      React.createElement("div", { style: { display: "flex", gap: 12, marginTop: 16 } }, 
+        React.createElement("button", { className: "btn", onClick: submitTx, style: { flex: 1, background: "#7c3aed", padding: 14, borderRadius: 60 } }, "Kaydet"),
+        React.createElement("button", { className: "btn", onClick: goHome, style: { flex: 1, background: "#2a2a32", padding: 14, borderRadius: 60 } }, "İptal")
+      )
+    )
+  );
   
   const DetailModal = () => {
     if (!detailModal) return null;
@@ -251,7 +285,7 @@ const App = () => {
   
   const BottomNav = () => React.createElement("div", { className: "bottom-nav" },
     React.createElement("button", { className: `nav-btn ${view === "home" ? "nav-active" : ""}`, onClick: goHome }, React.createElement("span", { style: { fontSize: 22 } }, "🏠"), React.createElement("span", null, "Ana Sayfa")),
-    React.createElement("button", { className: "nav-btn", onClick: () => { setView("add"); setEditTarget(null); setForm(blankForm); } }, React.createElement("span", { style: { fontSize: 22 } }, "➕"), React.createElement("span", null, "Ekle")),
+    React.createElement("button", { className: "nav-btn", onClick: () => { openAdd(); } }, React.createElement("span", { style: { fontSize: 22 } }, "➕"), React.createElement("span", null, "Ekle")),
     React.createElement("button", { className: "nav-btn", onClick: exportData }, React.createElement("span", { style: { fontSize: 22 } }, "💾"), React.createElement("span", null, "Yedek Al")),
     React.createElement("label", { className: "nav-btn", style: { cursor: "pointer" } }, React.createElement("span", { style: { fontSize: 22 } }, "📂"), React.createElement("span", null, "Yedek Yükle"), React.createElement("input", { type: "file", accept: ".json", ref: fileInputRef, onChange: importData, style: { display: "none" } }))
   );
@@ -263,3 +297,5 @@ ReactDOM.render(React.createElement(App, null), document.getElementById("root"))
 </script>
 </body>
 </html>
+  
+  
