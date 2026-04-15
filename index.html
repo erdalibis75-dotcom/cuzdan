@@ -7,8 +7,8 @@
 <style>
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   body{background:#0a0a0c;color:#ededee;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;overflow-x:hidden}
-  #root{max-width:500px;margin:0 auto;min-height:100vh;background:#0a0a0c;padding-bottom:80px}
-  .card{background:#121216;border:1px solid #1f1f24;border-radius:24px;padding:18px}
+  .container{max-width:500px;margin:0 auto;min-height:100vh;background:#0a0a0c;padding-bottom:80px}
+  .card{background:#121216;border:1px solid #1f1f24;border-radius:24px;padding:18px;margin-bottom:16px}
   .btn{cursor:pointer;transition:all 0.1s ease;font-weight:600;border:none;background:none}
   .btn:active{transform:scale(0.96);opacity:0.8}
   .tx-row{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:20px;background:#121216;margin-bottom:8px;cursor:pointer;border:1px solid #1f1f24}
@@ -34,20 +34,41 @@
   .mt-2{margin-top:8px}
   .toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#059669;color:white;padding:10px 20px;border-radius:40px;font-size:14px;font-weight:600;z-index:300;max-width:90%;text-align:center}
   .toast-error{background:#dc2626}
+  .hidden{display:none}
 </style>
 </head>
 <body>
-<div id="root"></div>
-<script src="https://unpkg.com/react@17.0.2/umd/react.development.js"></script>
-<script src="https://unpkg.com/react-dom@17.0.2/umd/react-dom.development.js"></script>
+<div id="app" class="container"></div>
+
 <script>
-// UYGULAMA
+// Sabitler
 const PEOPLE = ["Erdal", "A.A", "N.A"];
 
 const formatTRY = (n) => new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 }).format(n || 0);
 const formatAUD = (n) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 2 }).format(n || 0);
 const formatDateShort = (d) => d ? new Date(d).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }) : "";
 
+let txs = [];
+let rate = 0.032;
+let currentView = "home";
+let selectedPerson = null;
+let editId = null;
+let filterType = "all";
+let filterPerson = "all";
+let searchText = "";
+let monthViewKey = null;
+let personTxFilter = "all";
+let personSearch = "";
+let toastTimeout = null;
+
+// Form elemanları
+let formType = "expense";
+let formPerson = "Erdal";
+let formAmount = "";
+let formNote = "";
+let formDate = new Date().toISOString().split("T")[0];
+
+// Örnek veri
 const SAMPLE_TXS = [
   { id: 1, type: "income", person: "Erdal", amount: 15000, note: "Mart maaşı", date: "2026-03-01" },
   { id: 2, type: "expense", person: "Erdal", amount: 3500, note: "Kira", date: "2026-03-03" },
@@ -58,265 +79,529 @@ const SAMPLE_TXS = [
   { id: 7, type: "expense", person: "Erdal", amount: 540, note: "Sinema + yemek", date: "2026-03-12" }
 ];
 
-const App = () => {
-  const [txs, setTxs] = React.useState(() => {
-    try { const saved = localStorage.getItem("wallet_data"); return saved ? JSON.parse(saved) : SAMPLE_TXS; } catch(e) { return SAMPLE_TXS; }
-  });
-  const [rate, setRate] = React.useState(0.032);
-  const [rateLoading, setRateLoading] = React.useState(true);
-  const [view, setView] = React.useState("home");
-  const [selectedPerson, setSelectedPerson] = React.useState(null);
-  const [editTarget, setEditTarget] = React.useState(null);
-  const [detailModal, setDetailModal] = React.useState(null);
-  const [filterType, setFilterType] = React.useState("all");
-  const [filterPerson, setFilterPerson] = React.useState("all");
-  const [searchText, setSearchText] = React.useState("");
-  const [monthViewKey, setMonthViewKey] = React.useState(null);
-  const [personTxFilter, setPersonTxFilter] = React.useState("all");
-  const [personSearch, setPersonSearch] = React.useState("");
-  const [toastMessage, setToastMessage] = React.useState(null);
-  const fileInputRef = React.useRef(null);
-  
-  const blankForm = { type: "expense", person: "Erdal", amount: "", note: "", date: new Date().toISOString().split("T")[0] };
-  const [form, setForm] = React.useState(blankForm);
-  
-  React.useEffect(() => { localStorage.setItem("wallet_data", JSON.stringify(txs)); }, [txs]);
-  
-  React.useEffect(() => {
-    const fetchRate = async () => {
-      try { const res = await fetch("https://api.frankfurter.app/latest?from=TRY&to=AUD"); const data = await res.json(); if (data.rates?.AUD) setRate(data.rates.AUD); } catch(e) {} finally { setRateLoading(false); }
-    };
-    fetchRate();
-  }, []);
-  
-  const showToast = (msg, isErr = false) => { setToastMessage({ text: msg, isError: isErr }); setTimeout(() => setToastMessage(null), 3000); };
-  const toAUD = (n) => (n || 0) * rate;
-  const totalIncome = txs.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const totalExpense = txs.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
-  const balance = totalIncome - totalExpense;
-  
-  const personStats = PEOPLE.map(p => {
+// Helper fonksiyonlar
+function showToast(msg, isError = false) {
+  const toastEl = document.getElementById("toast");
+  if (toastTimeout) clearTimeout(toastTimeout);
+  toastEl.textContent = msg;
+  toastEl.className = `toast ${isError ? "toast-error" : ""}`;
+  toastEl.classList.remove("hidden");
+  toastTimeout = setTimeout(() => toastEl.classList.add("hidden"), 3000);
+}
+
+function saveToLocal() {
+  localStorage.setItem("wallet_data_v2", JSON.stringify(txs));
+}
+
+function loadFromLocal() {
+  try {
+    const saved = localStorage.getItem("wallet_data_v2");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        txs = parsed;
+        return;
+      }
+    }
+  } catch(e) {}
+  txs = JSON.parse(JSON.stringify(SAMPLE_TXS));
+}
+
+// Hesaplamalar
+function getTotalIncome() { return txs.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0); }
+function getTotalExpense() { return txs.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0); }
+function getBalance() { return getTotalIncome() - getTotalExpense(); }
+function toAUD(n) { return (n || 0) * rate; }
+
+function getPersonStats() {
+  return PEOPLE.map(p => {
     const inc = txs.filter(t => t.person === p && t.type === "income").reduce((s, t) => s + t.amount, 0);
     const exp = txs.filter(t => t.person === p && t.type === "expense").reduce((s, t) => s + t.amount, 0);
     return { name: p, income: inc, expense: exp, balance: inc - exp };
   });
-  
-  const monthMap = {};
+}
+
+function getMonthMap() {
+  const map = {};
   txs.forEach(t => {
     if (!t.date) return;
     const d = new Date(t.date);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    if (!monthMap[key]) monthMap[key] = { inc: 0, exp: 0, label: d.toLocaleDateString("tr-TR", { month: "long", year: "numeric" }), transactions: [] };
-    monthMap[key][t.type === "income" ? "inc" : "exp"] += t.amount;
-    monthMap[key].transactions.push(t);
+    if (!map[key]) map[key] = { inc: 0, exp: 0, label: d.toLocaleDateString("tr-TR", { month: "long", year: "numeric" }), transactions: [] };
+    map[key][t.type === "income" ? "inc" : "exp"] += t.amount;
+    map[key].transactions.push(t);
   });
-  const monthKeys = Object.keys(monthMap).sort().reverse();
-  
-  const filteredHome = txs.filter(t => {
+  return map;
+}
+
+function getFilteredHome() {
+  return txs.filter(t => {
     if (filterType !== "all" && t.type !== filterType) return false;
     if (filterPerson !== "all" && t.person !== filterPerson) return false;
     if (searchText.trim() !== "" && !(t.note || "").toLowerCase().includes(searchText.toLowerCase())) return false;
     return true;
   }).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 20);
+}
+
+// Render fonksiyonları
+function render() {
+  const app = document.getElementById("app");
+  if (!app) return;
   
-  const exportData = () => {
-    try {
-      const dataStr = JSON.stringify(txs, null, 2);
-      const blob = new Blob([dataStr], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `cuzdan_yedek_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast("✅ Yedek başarıyla alındı!");
-    } catch(e) { showToast("❌ Yedek alınırken hata!", true); }
+  if (currentView === "home") {
+    app.innerHTML = renderHome();
+  } else if (currentView === "add") {
+    app.innerHTML = renderAdd();
+  } else if (currentView === "person") {
+    app.innerHTML = renderPerson();
+  } else if (currentView === "month") {
+    app.innerHTML = renderMonth();
+  }
+  
+  // Event listeners ekle
+  attachEvents();
+}
+
+function renderHome() {
+  const totalIncome = getTotalIncome();
+  const totalExpense = getTotalExpense();
+  const balance = getBalance();
+  const personStats = getPersonStats();
+  const monthMap = getMonthMap();
+  const monthKeys = Object.keys(monthMap).sort().reverse();
+  const filteredHome = getFilteredHome();
+  
+  return `
+    <div class="slide-up" style="padding:0 18px">
+      <div class="card" style="margin-bottom:24px;background:linear-gradient(135deg,#17132a,#0f0f17)">
+        <div style="font-size:11px;font-weight:600;color:#c4b5fd">TOPLAM BAKİYE</div>
+        <div style="font-size:36px;font-weight:800;font-family:monospace;color:${balance>=0?"#c4b5fd":"#ff9f8f"}">${formatTRY(balance)}</div>
+        <div class="aud-badge" style="background:#2a1e44;margin-top:5px">🇦🇺 ${formatAUD(toAUD(balance))}</div>
+        <div style="display:flex;gap:20px;margin-top:16px">
+          <div><div style="font-size:10px;color:#aaa">GELİR</div><div style="font-weight:800;color:#34d399">${formatTRY(totalIncome)}</div><div class="aud-badge" style="margin-top:2px">A$ ${toAUD(totalIncome).toFixed(2)}</div></div>
+          <div><div style="font-size:10px;color:#aaa">GİDER</div><div style="font-weight:800;color:#f87171">${formatTRY(totalExpense)}</div><div class="aud-badge" style="margin-top:2px">A$ ${toAUD(totalExpense).toFixed(2)}</div></div>
+        </div>
+      </div>
+      
+      <div style="margin-bottom:20px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px">👥 Kişi Bazında</div>
+        ${personStats.map(p => {
+          const saveRate = p.income > 0 ? Math.min(100, (p.balance / p.income) * 100) : 0;
+          return `
+            <div class="card" style="margin-bottom:10px;cursor:pointer" data-action="person" data-name="${p.name}">
+              <div class="flex-between">
+                <div><span style="font-weight:800">${p.name}</span><div style="font-size:11px;color:#aaa">tasarruf %${Math.round(saveRate)}</div></div>
+                <div style="text-align:right"><div style="font-weight:700">${formatTRY(p.balance)}</div><div class="aud-badge">A$ ${toAUD(p.balance).toFixed(2)}</div></div>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" style="width:${saveRate}%"></div></div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+      
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+        <select id="filterTypeSelect" class="chip">
+          <option value="all" ${filterType==="all"?"selected":""}>📌 Tümü</option>
+          <option value="income" ${filterType==="income"?"selected":""}>💰 Gelir</option>
+          <option value="expense" ${filterType==="expense"?"selected":""}>💸 Gider</option>
+        </select>
+        <select id="filterPersonSelect" class="chip">
+          <option value="all" ${filterPerson==="all"?"selected":""}>👤 Tüm kişiler</option>
+          ${PEOPLE.map(p => `<option value="${p}" ${filterPerson===p?"selected":""}>${p}</option>`).join("")}
+        </select>
+      </div>
+      
+      <input type="text" id="searchInput" class="input-field" placeholder="🔍 Not içinde ara (maaş, kira, market...)" value="${searchText.replace(/"/g, "&quot;")}" style="margin-bottom:16px">
+      
+      <div style="font-weight:700;margin:6px 0 8px">📋 Son İşlemler</div>
+      ${filteredHome.map(tx => `
+        <div class="tx-row" data-action="detail" data-id="${tx.id}">
+          <div style="display:flex;gap:12px;align-items:center;flex:1">
+            <div style="width:42px;height:42px;border-radius:30px;background:${tx.type==="income"?"#0e2a1f":"#2c1a1a"};display:flex;align-items:center;justify-content:center;font-size:20px">${tx.type==="income"?"📈":"💸"}</div>
+            <div><div style="font-weight:700">${escapeHtml(tx.note) || (tx.type==="income"?"Gelir":"Harcama")}</div><div style="font-size:11px;color:#999;display:flex;gap:6px;margin-top:4px"><span>${tx.person}</span><span>${formatDateShort(tx.date)}</span></div></div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:800;font-family:monospace;color:${tx.type==="income"?"#34d399":"#f87171"}">${tx.type==="income"?`+${formatTRY(tx.amount)}`:`-${formatTRY(tx.amount)}`}</div>
+            <div class="aud-badge" style="font-size:9px;margin-top:3px">🇦🇺 ${formatAUD(toAUD(tx.amount))}</div>
+          </div>
+        </div>
+      `).join("")}
+      ${filteredHome.length === 0 ? '<div style="text-align:center;padding:40px;color:#555">İşlem yok. + ile ekleyin</div>' : ''}
+      
+      <div style="margin-top:24px;margin-bottom:30px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px">📆 Aylık Özetler</div>
+        <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:8px">
+          ${monthKeys.map(key => {
+            const m = monthMap[key];
+            return `
+              <div class="card" style="padding:10px 16px;min-width:110px;cursor:pointer" data-action="month" data-key="${key}">
+                <div style="font-weight:800;font-size:13px">${m.label.split(" ")[0]}</div>
+                <div style="font-size:12px"><span style="color:#34d399">${formatTRY(m.inc)}</span> / <span style="color:#f87171">${formatTRY(m.exp)}</span></div>
+                <div style="font-size:11px;color:#aaa">${formatTRY(m.inc - m.exp)}</div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderAdd() {
+  return `
+    <div class="slide-up" style="padding:0 18px">
+      <div class="card" style="padding:26px">
+        <h3 style="margin-bottom:16px">${editId ? "✏️ Düzenle" : "➕ Yeni İşlem"}</h3>
+        <select id="formType" class="input-field">
+          <option value="income" ${formType==="income"?"selected":""}>💰 Gelir</option>
+          <option value="expense" ${formType==="expense"?"selected":""}>💸 Gider</option>
+        </select>
+        <select id="formPerson" class="input-field">
+          ${PEOPLE.map(p => `<option value="${p}" ${formPerson===p?"selected":""}>${p}</option>`).join("")}
+        </select>
+        <input type="number" id="formAmount" class="input-field" placeholder="₺ Tutar" value="${formAmount}">
+        <input type="text" id="formNote" class="input-field" placeholder="📝 Not (maaş, kira, market...)" value="${escapeHtml(formNote)}">
+        <input type="date" id="formDate" class="input-field" value="${formDate}">
+        <div style="display:flex;gap:12px;margin-top:16px">
+          <button id="saveBtn" class="btn" style="flex:1;background:#7c3aed;padding:14px;border-radius:60px">Kaydet</button>
+          <button id="cancelBtn" class="btn" style="flex:1;background:#2a2a32;padding:14px;border-radius:60px">İptal</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderPerson() {
+  if (!selectedPerson) return "";
+  const personStats = getPersonStats();
+  const pStat = personStats.find(p => p.name === selectedPerson);
+  const filtered = txs.filter(t => t.person === selectedPerson && (personTxFilter === "all" || t.type === personTxFilter))
+    .filter(t => personSearch === "" || (t.note || "").toLowerCase().includes(personSearch.toLowerCase()))
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  
+  return `
+    <div class="slide-up" style="padding:0 18px">
+      <button id="backHomeBtn" class="btn" style="background:#25252e;padding:8px 18px;border-radius:40px;margin-bottom:16px">← Ana Sayfa</button>
+      <div style="display:flex;gap:14px;align-items:center;margin-bottom:20px">
+        <div class="avatar">${selectedPerson[0]}</div>
+        <div><div style="font-weight:800;font-size:22px">${selectedPerson}</div><div style="color:#34d399">Net ${formatTRY(pStat?.balance || 0)}</div></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:16px">
+        <select id="personTxFilter" class="chip">
+          <option value="all" ${personTxFilter==="all"?"selected":""}>Tüm işlemler</option>
+          <option value="income" ${personTxFilter==="income"?"selected":""}>Gelirler</option>
+          <option value="expense" ${personTxFilter==="expense"?"selected":""}>Giderler</option>
+        </select>
+        <input type="text" id="personSearch" class="input-field" style="padding:8px 14px;margin:0" placeholder="🔍 Not ara" value="${escapeHtml(personSearch)}">
+      </div>
+      ${filtered.map(tx => `
+        <div class="tx-row" data-action="detail" data-id="${tx.id}">
+          <div style="display:flex;gap:12px;align-items:center;flex:1">
+            <div style="width:42px;height:42px;border-radius:30px;background:${tx.type==="income"?"#0e2a1f":"#2c1a1a"};display:flex;align-items:center;justify-content:center;font-size:20px">${tx.type==="income"?"📈":"💸"}</div>
+            <div><div style="font-weight:700">${escapeHtml(tx.note) || (tx.type==="income"?"Gelir":"Harcama")}</div><div style="font-size:11px;color:#999;margin-top:4px">${formatDateShort(tx.date)}</div></div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:800;font-family:monospace;color:${tx.type==="income"?"#34d399":"#f87171"}">${tx.type==="income"?`+${formatTRY(tx.amount)}`:`-${formatTRY(tx.amount)}`}</div>
+            <div class="aud-badge" style="font-size:9px;margin-top:3px">🇦🇺 ${formatAUD(toAUD(tx.amount))}</div>
+          </div>
+        </div>
+      `).join("")}
+      ${filtered.length === 0 ? '<div style="text-align:center;padding:40px;color:#666">Kayıt yok</div>' : ''}
+      <button id="addFromPersonBtn" class="floating-btn" style="position:relative;margin-top:20px;width:100%;border-radius:60px;background:#7c3aed">+ Yeni İşlem</button>
+    </div>
+  `;
+}
+
+function renderMonth() {
+  const monthMap = getMonthMap();
+  const data = monthViewKey ? monthMap[monthViewKey] : null;
+  if (!data) return "";
+  
+  return `
+    <div class="slide-up" style="padding:0 18px">
+      <button id="backHomeBtn2" class="btn" style="background:#25252e;padding:8px 18px;border-radius:40px;margin-bottom:16px">← Geri</button>
+      <div class="card" style="padding:20px;text-align:center;margin-bottom:20px">
+        <div style="font-size:20px;font-weight:800">${data.label}</div>
+        <div style="display:flex;justify-content:center;gap:20px;margin-top:12px">
+          <div><div>💰 Gelir</div><div style="font-weight:800;color:#34d399">${formatTRY(data.inc)}</div></div>
+          <div><div>💸 Gider</div><div style="font-weight:800;color:#f87171">${formatTRY(data.exp)}</div></div>
+          <div><div>📌 Net</div><div style="font-weight:800">${formatTRY(data.inc - data.exp)}</div></div>
+        </div>
+      </div>
+      <div style="font-weight:700;margin-bottom:12px">📅 Ayın işlemleri</div>
+      ${data.transactions.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(tx => `
+        <div class="tx-row" data-action="detail" data-id="${tx.id}">
+          <div style="display:flex;gap:12px;align-items:center;flex:1">
+            <div style="width:42px;height:42px;border-radius:30px;background:${tx.type==="income"?"#0e2a1f":"#2c1a1a"};display:flex;align-items:center;justify-content:center;font-size:20px">${tx.type==="income"?"📈":"💸"}</div>
+            <div><div style="font-weight:700">${escapeHtml(tx.note) || (tx.type==="income"?"Gelir":"Harcama")}</div><div style="font-size:11px;color:#999;margin-top:4px">${tx.person} • ${formatDateShort(tx.date)}</div></div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:800;font-family:monospace;color:${tx.type==="income"?"#34d399":"#f87171"}">${tx.type==="income"?`+${formatTRY(tx.amount)}`:`-${formatTRY(tx.amount)}`}</div>
+            <div class="aud-badge" style="font-size:9px;margin-top:3px">🇦🇺 ${formatAUD(toAUD(tx.amount))}</div>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function escapeHtml(str) {
+  if (!str) return "";
+  return str.replace(/[&<>]/g, function(m) {
+    if (m === "&") return "&amp;";
+    if (m === "<") return "&lt;";
+    if (m === ">") return "&gt;";
+    return m;
+  });
+}
+
+// Event listeners
+function attachEvents() {
+  // Ana sayfa eventleri
+  const filterTypeSelect = document.getElementById("filterTypeSelect");
+  if (filterTypeSelect) filterTypeSelect.onchange = (e) => { filterType = e.target.value; render(); };
+  
+  const filterPersonSelect = document.getElementById("filterPersonSelect");
+  if (filterPersonSelect) filterPersonSelect.onchange = (e) => { filterPerson = e.target.value; render(); };
+  
+  const searchInput = document.getElementById("searchInput");
+  if (searchInput) searchInput.oninput = (e) => { searchText = e.target.value; render(); };
+  
+  // Kişi kartları
+  document.querySelectorAll("[data-action='person']").forEach(el => {
+    el.onclick = () => { selectedPerson = el.dataset.name; currentView = "person"; personTxFilter = "all"; personSearch = ""; render(); };
+  });
+  
+  // Ay kartları
+  document.querySelectorAll("[data-action='month']").forEach(el => {
+    el.onclick = () => { monthViewKey = el.dataset.key; currentView = "month"; render(); };
+  });
+  
+  // İşlem detayları
+  document.querySelectorAll("[data-action='detail']").forEach(el => {
+    el.onclick = () => showDetailModal(parseInt(el.dataset.id));
+  });
+  
+  // Add view eventleri
+  const saveBtn = document.getElementById("saveBtn");
+  if (saveBtn) saveBtn.onclick = saveTransaction;
+  
+  const cancelBtn = document.getElementById("cancelBtn");
+  if (cancelBtn) cancelBtn.onclick = () => { currentView = "home"; render(); };
+  
+  const formTypeEl = document.getElementById("formType");
+  if (formTypeEl) formTypeEl.onchange = (e) => { formType = e.target.value; };
+  
+  const formPersonEl = document.getElementById("formPerson");
+  if (formPersonEl) formPersonEl.onchange = (e) => { formPerson = e.target.value; };
+  
+  const formAmountEl = document.getElementById("formAmount");
+  if (formAmountEl) formAmountEl.oninput = (e) => { formAmount = e.target.value; };
+  
+  const formNoteEl = document.getElementById("formNote");
+  if (formNoteEl) formNoteEl.oninput = (e) => { formNote = e.target.value; };
+  
+  const formDateEl = document.getElementById("formDate");
+  if (formDateEl) formDateEl.onchange = (e) => { formDate = e.target.value; };
+  
+  // Person view eventleri
+  const backHomeBtn = document.getElementById("backHomeBtn");
+  if (backHomeBtn) backHomeBtn.onclick = () => { currentView = "home"; render(); };
+  
+  const backHomeBtn2 = document.getElementById("backHomeBtn2");
+  if (backHomeBtn2) backHomeBtn2.onclick = () => { currentView = "home"; render(); };
+  
+  const personTxFilterEl = document.getElementById("personTxFilter");
+  if (personTxFilterEl) personTxFilterEl.onchange = (e) => { personTxFilter = e.target.value; render(); };
+  
+  const personSearchEl = document.getElementById("personSearch");
+  if (personSearchEl) personSearchEl.oninput = (e) => { personSearch = e.target.value; render(); };
+  
+  const addFromPersonBtn = document.getElementById("addFromPersonBtn");
+  if (addFromPersonBtn) addFromPersonBtn.onclick = () => { openAddFromPerson(); };
+}
+
+function saveTransaction() {
+  if (!formAmount || !formPerson) {
+    showToast("Lütfen tutar ve kişi seçin!", true);
+    return;
+  }
+  const amountNum = parseFloat(formAmount);
+  if (isNaN(amountNum) || amountNum <= 0) {
+    showToast("Geçerli bir tutar girin!", true);
+    return;
+  }
+  
+  const newTx = { type: formType, person: formPerson, amount: amountNum, note: formNote, date: formDate, id: editId ? editId : Date.now() };
+  if (editId) {
+    const index = txs.findIndex(t => t.id === editId);
+    if (index !== -1) txs[index] = newTx;
+  } else {
+    txs.push(newTx);
+  }
+  saveToLocal();
+  currentView = "home";
+  editId = null;
+  formAmount = "";
+  formNote = "";
+  showToast(editId ? "✏️ İşlem düzenlendi" : "➕ Yeni işlem eklendi");
+  render();
+}
+
+function openAddFromPerson() {
+  formType = "expense";
+  formPerson = selectedPerson;
+  formAmount = "";
+  formNote = "";
+  formDate = new Date().toISOString().split("T")[0];
+  editId = null;
+  currentView = "add";
+  render();
+}
+
+function showDetailModal(id) {
+  const tx = txs.find(t => t.id === id);
+  if (!tx) return;
+  
+  const modal = document.createElement("div");
+  modal.className = "modal-overlay";
+  modal.innerHTML = `
+    <div class="modal-card">
+      <div style="font-weight:800;font-size:22px">${tx.type === "income" ? "Gelir Detayı" : "Gider Detayı"}</div>
+      <div style="font-size:32px;font-family:monospace;font-weight:800;margin:10px 0;color:${tx.type === "income" ? "#34d399" : "#f87171"}">${formatTRY(tx.amount)}</div>
+      <div class="aud-badge" style="margin-bottom:14px">🇦🇺 ${formatAUD(toAUD(tx.amount))}</div>
+      <div style="background:#1c1c24;border-radius:24px;padding:16px;margin-bottom:20px">
+        <div>👤 Kişi: ${tx.person}</div>
+        <div class="mt-2">📅 Tarih: ${new Date(tx.date).toLocaleDateString("tr-TR")}</div>
+        <div class="mt-2">📝 Not: ${tx.note || "—"}</div>
+      </div>
+      <div style="display:flex;gap:12px">
+        <button id="modalEditBtn" class="btn" style="flex:1;background:#2c5f5f;padding:12px;border-radius:40px">✏️ Düzenle</button>
+        <button id="modalDeleteBtn" class="btn" style="flex:1;background:#6b2e2e;padding:12px;border-radius:40px">🗑️ Sil</button>
+        <button id="modalCloseBtn" class="btn" style="background:#2c2c36;padding:12px 18px;border-radius:40px">Kapat</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  
+  modal.querySelector("#modalCloseBtn").onclick = () => modal.remove();
+  modal.querySelector("#modalEditBtn").onclick = () => {
+    editId = tx.id;
+    formType = tx.type;
+    formPerson = tx.person;
+    formAmount = String(tx.amount);
+    formNote = tx.note || "";
+    formDate = tx.date;
+    currentView = "add";
+    modal.remove();
+    render();
   };
+  modal.querySelector("#modalDeleteBtn").onclick = () => {
+    if (confirm("Bu işlemi silmek istediğinize emin misiniz?")) {
+      txs = txs.filter(t => t.id !== id);
+      saveToLocal();
+      modal.remove();
+      showToast("🗑️ İşlem silindi");
+      render();
+    }
+  };
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+}
+
+// Header ve bottom nav render
+function renderHeaderAndNav() {
+  const headerHtml = currentView !== "add" ? `
+    <div style="padding:20px 18px 10px">
+      <div class="flex-between">
+        <div>
+          <div style="font-size:10px;font-weight:800;color:#a78bfa;letter-spacing:1px">BÜTÇE ASİSTANI</div>
+          <div style="font-size:22px;font-weight:800">${currentView === "person" && selectedPerson ? `${selectedPerson} · Detay` : currentView === "month" ? "📅 Ay Özeti" : "Cüzdan"}</div>
+        </div>
+        <div style="display:flex;gap:6px;background:#15151c;padding:5px 12px;border-radius:40px">
+          <span>🇦🇺</span>
+          <span style="font-family:monospace;font-size:12px">A$${rate.toFixed(5)}</span>
+          <button id="refreshRateBtn" class="btn" style="font-size:12px">⟳</button>
+        </div>
+      </div>
+    </div>
+  ` : "";
   
-  const importData = (event) => {
-    const file = event.target.files[0];
+  const bottomNav = `
+    <div class="bottom-nav">
+      <button id="navHome" class="nav-btn ${currentView === "home" ? "nav-active" : ""}"><span style="font-size:22px">🏠</span><span>Ana Sayfa</span></button>
+      <button id="navAdd" class="nav-btn"><span style="font-size:22px">➕</span><span>Ekle</span></button>
+      <button id="navExport" class="nav-btn"><span style="font-size:22px">💾</span><span>Yedek Al</span></button>
+      <label id="navImportLabel" class="nav-btn" style="cursor:pointer"><span style="font-size:22px">📂</span><span>Yedek Yükle</span><input type="file" id="navImport" accept=".json" style="display:none"></label>
+    </div>
+  `;
+  
+  const floatingBtn = currentView !== "add" ? `<button id="floatingAddBtn" class="floating-btn">+</button>` : "";
+  const toastHtml = `<div id="toast" class="toast hidden"></div>`;
+  
+  const app = document.getElementById("app");
+  const existingHeader = document.querySelector(".bottom-nav");
+  if (existingHeader) existingHeader.remove();
+  
+  app.insertAdjacentHTML("afterbegin", headerHtml);
+  app.insertAdjacentHTML("beforeend", bottomNav);
+  app.insertAdjacentHTML("beforeend", floatingBtn);
+  app.insertAdjacentHTML("beforeend", toastHtml);
+  
+  // Nav eventleri
+  document.getElementById("navHome")?.addEventListener("click", () => { currentView = "home"; render(); });
+  document.getElementById("navAdd")?.addEventListener("click", () => { 
+    editId = null; formAmount = ""; formNote = ""; formType = "expense"; formPerson = "Erdal"; formDate = new Date().toISOString().split("T")[0]; currentView = "add"; render(); 
+  });
+  document.getElementById("navExport")?.addEventListener("click", () => {
+    const dataStr = JSON.stringify(txs, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cuzdan_yedek_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("✅ Yedek alındı!");
+  });
+  document.getElementById("navImport")?.addEventListener("change", (e) => {
+    const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = (ev) => {
       try {
-        const imported = JSON.parse(e.target.result);
-        if (Array.isArray(imported)) { setTxs(imported); showToast(`✅ ${imported.length} kayıt yüklendi!`); setView("home"); }
-        else showToast("❌ Geçersiz dosya formatı!", true);
+        const imported = JSON.parse(ev.target.result);
+        if (Array.isArray(imported)) { txs = imported; saveToLocal(); showToast(`✅ ${imported.length} kayıt yüklendi!`); currentView = "home"; render(); }
+        else showToast("❌ Geçersiz format!", true);
       } catch(err) { showToast("❌ Dosya okunamadı!", true); }
     };
     reader.readAsText(file);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-  
-  const openAdd = () => { setForm(blankForm); setEditTarget(null); setView("add"); };
-  const openEdit = (tx) => { setForm({ ...tx, amount: String(tx.amount) }); setEditTarget(tx); setView("add"); setDetailModal(null); };
-  const deleteTx = (id) => { if (confirm("Bu işlemi silmek istediğinize emin misiniz?")) { setTxs(prev => prev.filter(t => t.id !== id)); setDetailModal(null); showToast("🗑️ İşlem silindi"); } };
-  const submitTx = () => {
-    if (!form.amount || !form.person) { showToast("Lütfen tutar ve kişi seçin!", true); return; }
-    const amountNum = parseFloat(form.amount);
-    if (isNaN(amountNum) || amountNum <= 0) { showToast("Geçerli bir tutar girin!", true); return; }
-    const newTx = { ...form, amount: amountNum, id: editTarget ? editTarget.id : Date.now() };
-    if (editTarget) setTxs(prev => prev.map(t => t.id === editTarget.id ? newTx : t));
-    else setTxs(prev => [...prev, newTx]);
-    setView("home"); setEditTarget(null); setForm(blankForm);
-    showToast(editTarget ? "✏️ İşlem düzenlendi" : "➕ Yeni işlem eklendi");
-  };
-  
-  const goHome = () => { setView("home"); setSelectedPerson(null); setMonthViewKey(null); setFilterType("all"); setFilterPerson("all"); setSearchText(""); setDetailModal(null); };
-  const openPersonDetail = (name) => { setSelectedPerson(name); setPersonTxFilter("all"); setPersonSearch(""); setView("person"); };
-  const openMonthDetail = (key) => { setMonthViewKey(key); setView("month"); };
-  
-  const currentMonthData = monthViewKey ? monthMap[monthViewKey] : null;
-  const personTxs = selectedPerson ? txs.filter(t => t.person === selectedPerson && (personTxFilter === "all" || t.type === personTxFilter)).filter(t => personSearch === "" || (t.note || "").toLowerCase().includes(personSearch.toLowerCase())).sort((a, b) => new Date(b.date) - new Date(a.date)) : [];
-  
-  const TransactionRow = ({ tx, onClick }) => React.createElement("div", { className: "tx-row", onClick: () => onClick(tx) },
-    React.createElement("div", { style: { display: "flex", gap: 12, alignItems: "center", flex: 1 } },
-      React.createElement("div", { style: { width: 42, height: 42, borderRadius: 30, background: tx.type === "income" ? "#0e2a1f" : "#2c1a1a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 } }, tx.type === "income" ? "📈" : "💸"),
-      React.createElement("div", null,
-        React.createElement("div", { style: { fontWeight: 700 } }, tx.note || (tx.type === "income" ? "Gelir" : "Harcama")),
-        React.createElement("div", { style: { fontSize: 11, color: "#999", display: "flex", gap: 6, marginTop: 4 } }, React.createElement("span", null, tx.person), React.createElement("span", null, formatDateShort(tx.date)))
-      )
-    ),
-    React.createElement("div", { style: { textAlign: "right" } },
-      React.createElement("div", { style: { fontWeight: 800, fontFamily: "monospace", color: tx.type === "income" ? "#34d399" : "#f87171" } }, tx.type === "income" ? `+${formatTRY(tx.amount)}` : `-${formatTRY(tx.amount)}`),
-      React.createElement("div", { className: "aud-badge", style: { fontSize: 9, marginTop: 3 } }, `🇦🇺 ${formatAUD(toAUD(tx.amount))}`)
-    )
-  );
-  
-  const Toast = () => toastMessage ? React.createElement("div", { className: `toast ${toastMessage.isError ? "toast-error" : ""}` }, toastMessage.text) : null;
-  
-  const HomeView = () => React.createElement("div", { className: "slide-up", style: { padding: "0 18px" } },
-    React.createElement("div", { className: "card", style: { marginBottom: 24, background: "linear-gradient(135deg, #17132a, #0f0f17)" } },
-      React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: "#c4b5fd" } }, "TOPLAM BAKİYE"),
-      React.createElement("div", { style: { fontSize: 36, fontWeight: 800, fontFamily: "monospace", color: balance >= 0 ? "#c4b5fd" : "#ff9f8f" } }, formatTRY(balance)),
-      React.createElement("div", { className: "aud-badge", style: { background: "#2a1e44", marginTop: 5 } }, `🇦🇺 ${formatAUD(toAUD(balance))}`),
-      React.createElement("div", { style: { display: "flex", gap: 20, marginTop: 16 } },
-        React.createElement("div", null, React.createElement("div", { style: { fontSize: 10, color: "#aaa" } }, "GELİR"), React.createElement("div", { style: { fontWeight: 800, color: "#34d399" } }, formatTRY(totalIncome)), React.createElement("div", { className: "aud-badge", style: { marginTop: 2 } }, `A$ ${toAUD(totalIncome).toFixed(2)}`)),
-        React.createElement("div", null, React.createElement("div", { style: { fontSize: 10, color: "#aaa" } }, "GİDER"), React.createElement("div", { style: { fontWeight: 800, color: "#f87171" } }, formatTRY(totalExpense)), React.createElement("div", { className: "aud-badge", style: { marginTop: 2 } }, `A$ ${toAUD(totalExpense).toFixed(2)}`))
-      )
-    ),
-    React.createElement("div", { style: { marginBottom: 20 } },
-      React.createElement("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 12 } }, "👥 Kişi Bazında"),
-      personStats.map(p => { const saveRate = p.income > 0 ? Math.min(100, (p.balance / p.income) * 100) : 0; return React.createElement("div", { key: p.name, className: "card", style: { marginBottom: 10, cursor: "pointer" }, onClick: () => openPersonDetail(p.name) }, React.createElement("div", { className: "flex-between" }, React.createElement("div", null, React.createElement("span", { style: { fontWeight: 800 } }, p.name), React.createElement("div", { style: { fontSize: 11, color: "#aaa" } }, `tasarruf %${Math.round(saveRate)}`)), React.createElement("div", { style: { textAlign: "right" } }, React.createElement("div", { style: { fontWeight: 700 } }, formatTRY(p.balance)), React.createElement("div", { className: "aud-badge" }, `A$ ${toAUD(p.balance).toFixed(2)}`))), React.createElement("div", { className: "progress-bar" }, React.createElement("div", { className: "progress-fill", style: { width: `${saveRate}%` } }))); })
-    ),
-    React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 } },
-      React.createElement("select", { className: "chip", value: filterType, onChange: e => setFilterType(e.target.value) }, React.createElement("option", { value: "all" }, "📌 Tümü"), React.createElement("option", { value: "income" }, "💰 Gelir"), React.createElement("option", { value: "expense" }, "💸 Gider")),
-      React.createElement("select", { className: "chip", value: filterPerson, onChange: e => setFilterPerson(e.target.value) }, React.createElement("option", { value: "all" }, "👤 Tüm kişiler"), PEOPLE.map(p => React.createElement("option", { key: p, value: p }, p)))
-    ),
-    React.createElement("input", { type: "text", className: "input-field", placeholder: "🔍 Not içinde ara (maaş, kira, market...)", value: searchText, onChange: e => setSearchText(e.target.value), style: { marginBottom: 16 } }),
-    React.createElement("div", { style: { fontWeight: 700, margin: "6px 0 8px" } }, "📋 Son İşlemler"),
-    filteredHome.map(tx => React.createElement(TransactionRow, { key: tx.id, tx: tx, onClick: t => setDetailModal(t) })),
-    filteredHome.length === 0 && React.createElement("div", { style: { textAlign: "center", padding: 40, color: "#555" } }, "İşlem yok. + ile ekleyin"),
-    React.createElement("div", { style: { marginTop: 24, marginBottom: 30 } },
-      React.createElement("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 12 } }, "📆 Aylık Özetler"),
-      React.createElement("div", { style: { display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 } }, monthKeys.map(key => { const m = monthMap[key]; return React.createElement("div", { key: key, className: "card", style: { padding: "10px 16px", minWidth: 110, cursor: "pointer" }, onClick: () => openMonthDetail(key) }, React.createElement("div", { style: { fontWeight: 800, fontSize: 13 } }, m.label.split(" ")[0]), React.createElement("div", { style: { fontSize: 12 } }, React.createElement("span", { style: { color: "#34d399" } }, formatTRY(m.inc)), " / ", React.createElement("span", { style: { color: "#f87171" } }, formatTRY(m.exp))), React.createElement("div", { style: { fontSize: 11, color: "#aaa" } }, formatTRY(m.inc - m.exp))); }))
-    )
-  );
-  
-  const PersonView = () => {
-    if (!selectedPerson) return null;
-    const pStat = personStats.find(p => p.name === selectedPerson);
-    return React.createElement("div", { className: "slide-up", style: { padding: "0 18px" } },
-      React.createElement("button", { className: "btn", onClick: goHome, style: { background: "#25252e", padding: "8px 18px", borderRadius: 40, marginBottom: 16 } }, "← Ana Sayfa"),
-      React.createElement("div", { style: { display: "flex", gap: 14, alignItems: "center", marginBottom: 20 } }, React.createElement("div", { className: "avatar" }, selectedPerson[0]), React.createElement("div", null, React.createElement("div", { style: { fontWeight: 800, fontSize: 22 } }, selectedPerson), React.createElement("div", { style: { color: "#34d399" } }, `Net ${formatTRY(pStat?.balance || 0)}`))),
-      React.createElement("div", { style: { display: "flex", gap: 12, marginBottom: 16 } }, React.createElement("select", { className: "chip", value: personTxFilter, onChange: e => setPersonTxFilter(e.target.value) }, React.createElement("option", { value: "all" }, "Tüm işlemler"), React.createElement("option", { value: "income" }, "Gelirler"), React.createElement("option", { value: "expense" }, "Giderler")), React.createElement("input", { className: "input-field", style: { padding: "8px 14px", margin: 0 }, placeholder: "🔍 Not ara", value: personSearch, onChange: e => setPersonSearch(e.target.value) })),
-      personTxs.map(tx => React.createElement(TransactionRow, { key: tx.id, tx: tx, onClick: t => setDetailModal(t) })),
-      personTxs.length === 0 && React.createElement("div", { style: { textAlign: "center", padding: 40, color: "#666" } }, "Kayıt yok"),
-      React.createElement("button", { className: "floating-btn", style: { position: "relative", marginTop: 20, width: "100%", borderRadius: 60, background: "#7c3aed" }, onClick: () => { setForm({ ...blankForm, person: selectedPerson }); setEditTarget(null); setView("add"); } }, "+ Yeni İşlem")
-    );
-  };
-  
-  const MonthView = () => {
-    if (!monthViewKey || !currentMonthData) return null;
-  
-    return React.createElement("div", { className: "slide-up", style: { padding: "0 18px" } },
-      React.createElement("button", { className: "btn", onClick: goHome, style: { background: "#25252e", padding: "8px 18px", borderRadius: 40, marginBottom: 16 } }, "← Geri"),
-      React.createElement("div", { className: "card", style: { padding: 20, textAlign: "center", marginBottom: 20 } }, React.createElement("div", { style: { fontSize: 20, fontWeight: 800 } }, currentMonthData.label), React.createElement("div", { style: { display: "flex", justifyContent: "center", gap: 20, marginTop: 12 } }, React.createElement("div", null, React.createElement("div", null, "💰 Gelir"), React.createElement("div", { style: { fontWeight: 800, color: "#34d399" } }, formatTRY(currentMonthData.inc))), React.createElement("div", null, React.createElement("div", null, "💸 Gider"), React.createElement("div", { style: { fontWeight: 800, color: "#f87171" } }, formatTRY(currentMonthData.exp))), React.createElement("div", null, React.createElement("div", null, "📌 Net"), React.createElement("div", { style: { fontWeight: 800 } }, formatTRY(currentMonthData.inc - currentMonthData.exp))))),
-      React.createElement("div", { style: { fontWeight: 700, marginBottom: 12 } }, "📅 Ayın işlemleri"),
-      currentMonthData.transactions.sort((a, b) => new Date(b.date) - new Date(a.date)).map(tx => React.createElement(TransactionRow, { key: tx.id, tx: tx, onClick: t => setDetailModal(t) }))
-    );
-  };
- const AddView = () => {
-    return React.createElement("div", { className: "slide-up", style: { padding: "0 18px" } },
-      React.createElement("div", { className: "card", style: { padding: 26 } },
-        React.createElement("h3", { style: { marginBottom: 16 } }, editId ? "✏️ Düzenle" : "➕ Yeni İşlem"),
-        React.createElement("select", { className: "input-field", value: formType, onChange: e => setFormType(e.target.value) },
-          React.createElement("option", { value: "income" }, "💰 Gelir"),
-          React.createElement("option", { value: "expense" }, "💸 Gider")
-        ),
-        React.createElement("select", { className: "input-field", value: formPerson, onChange: e => setFormPerson(e.target.value) },
-          PEOPLE.map(p => React.createElement("option", { key: p, value: p }, p))
-        ),
-        React.createElement("input", { type: "number", className: "input-field", placeholder: "₺ Tutar", value: formAmount, onChange: e => setFormAmount(e.target.value) }),
-        React.createElement("input", { className: "input-field", placeholder: "📝 Not (maaş, kira, market...)", value: formNote, onChange: e => setFormNote(e.target.value) }),
-        React.createElement("input", { type: "date", className: "input-field", value: formDate, onChange: e => setFormDate(e.target.value) }),
-        React.createElement("div", { style: { display: "flex", gap: 12, marginTop: 16 } },
-          React.createElement("button", { className: "btn", onClick: submitTx, style: { flex: 1, background: "#7c3aed", padding: 14, borderRadius: 60 } }, "Kaydet"),
-          React.createElement("button", { className: "btn", onClick: goHome, style: { flex: 1, background: "#2a2a32", padding: 14, borderRadius: 60 } }, "İptal")
-        )
-      )
-    );
-  };
-  
-  const DetailModal = () => {
-    if (!detailModal) return null;
-    return React.createElement("div", { className: "modal-overlay", onClick: () => setDetailModal(null) },
-      React.createElement("div", { className: "modal-card", onClick: e => e.stopPropagation() },
-        React.createElement("div", { style: { fontWeight: 800, fontSize: 22 } }, detailModal.type === "income" ? "Gelir Detayı" : "Gider Detayı"),
-        React.createElement("div", { style: { fontSize: 32, fontFamily: "monospace", fontWeight: 800, margin: "10px 0", color: detailModal.type === "income" ? "#34d399" : "#f87171" } }, formatTRY(detailModal.amount)),
-        React.createElement("div", { className: "aud-badge", style: { marginBottom: 14 } }, `🇦🇺 ${formatAUD(toAUD(detailModal.amount))}`),
-        React.createElement("div", { style: { background: "#1c1c24", borderRadius: 24, padding: 16, marginBottom: 20 } },
-          React.createElement("div", null, `👤 Kişi: ${detailModal.person}`),
-          React.createElement("div", { className: "mt-2" }, `📅 Tarih: ${new Date(detailModal.date).toLocaleDateString("tr-TR")}`),
-          React.createElement("div", { className: "mt-2" }, `📝 Not: ${detailModal.note || "—"}`)
-        ),
-        React.createElement("div", { style: { display: "flex", gap: 12 } },
-          React.createElement("button", { className: "btn", style: { flex: 1, background: "#2c5f5f", padding: 12, borderRadius: 40 }, onClick: () => { openEdit(detailModal); setDetailModal(null); } }, "✏️ Düzenle"),
-          React.createElement("button", { className: "btn", style: { flex: 1, background: "#6b2e2e", padding: 12, borderRadius: 40 }, onClick: () => deleteTx(detailModal.id) }, "🗑️ Sil"),
-          React.createElement("button", { className: "btn", style: { background: "#2c2c36", padding: "12px 18px", borderRadius: 40 }, onClick: () => setDetailModal(null) }, "Kapat")
-        )
-      )
-    );
-  };
-  
-  const Header = () => {
-    if (view === "add") return null;
-    return React.createElement("div", { style: { padding: "20px 18px 10px" } },
-      React.createElement("div", { className: "flex-between" },
-        React.createElement("div", null,
-          React.createElement("div", { style: { fontSize: 10, fontWeight: 800, color: "#a78bfa", letterSpacing: 1 } }, "BÜTÇE ASİSTANI"),
-          React.createElement("div", { style: { fontSize: 22, fontWeight: 800 } }, view === "person" && selectedPerson ? `${selectedPerson} · Detay` : view === "month" ? "📅 Ay Özeti" : "Cüzdan")
-        ),
-        React.createElement("div", { style: { display: "flex", gap: 6, background: "#15151c", padding: "5px 12px", borderRadius: 40 } },
-          React.createElement("span", null, "🇦🇺"),
-          React.createElement("span", { style: { fontFamily: "monospace", fontSize: 12 } }, rateLoading ? "..." : `A$${rate.toFixed(5)}`),
-          React.createElement("button", { className: "btn", onClick: async () => { setRateLoading(true); try { const r = await fetch("https://api.frankfurter.app/latest?from=TRY&to=AUD"); const d = await r.json(); if (d.rates?.AUD) setRate(d.rates.AUD); } catch(e) {} finally { setRateLoading(false); } }, style: { fontSize: 12 } }, "⟳")
-        )
-      )
-    );
-  };
-  
-  const BottomNav = () => React.createElement("div", { className: "bottom-nav" },
-    React.createElement("button", { className: `nav-btn ${view === "home" ? "nav-active" : ""}`, onClick: goHome }, React.createElement("span", { style: { fontSize: 22 } }, "🏠"), React.createElement("span", null, "Ana Sayfa")),
-    React.createElement("button", { className: "nav-btn", onClick: openAdd }, React.createElement("span", { style: { fontSize: 22 } }, "➕"), React.createElement("span", null, "Ekle")),
-    React.createElement("button", { className: "nav-btn", onClick: exportData }, React.createElement("span", { style: { fontSize: 22 } }, "💾"), React.createElement("span", null, "Yedek Al")),
-    React.createElement("label", { className: "nav-btn", style: { cursor: "pointer" } }, React.createElement("span", { style: { fontSize: 22 } }, "📂"), React.createElement("span", null, "Yedek Yükle"), React.createElement("input", { type: "file", accept: ".json", ref: fileInputRef, onChange: importData, style: { display: "none" } }))
-  );
-  
-  return React.createElement("div", null,
-    React.createElement(Header, null),
-    view === "home" && React.createElement(HomeView, null),
-    view === "person" && React.createElement(PersonView, null),
-    view === "month" && React.createElement(MonthView, null),
-    view === "add" && React.createElement(AddView, null),
-    React.createElement(DetailModal, null),
-    React.createElement(BottomNav, null),
-    view !== "add" && React.createElement("button", { className: "floating-btn", onClick: openAdd }, "+"),
-    React.createElement(Toast, null)
-  );
-};
+    e.target.value = "";
+  });
+  document.getElementById("floatingAddBtn")?.addEventListener("click", () => {
+    editId = null; formAmount = ""; formNote = ""; formType = "expense"; formPerson = "Erdal"; formDate = new Date().toISOString().split("T")[0]; currentView = "add"; render();
+  });
+  document.getElementById("refreshRateBtn")?.addEventListener("click", async () => {
+    try { const res = await fetch("https://api.frankfurter.app/latest?from=TRY&to=AUD"); const data = await res.json(); if (data.rates?.AUD) rate = data.rates.AUD; showToast("🔄 Kur güncellendi"); render(); } catch(e) { showToast("Kur alınamadı", true); }
+  });
+}
 
-ReactDOM.render(React.createElement(App, null), document.getElementById("root"));
+// Ana render fonksiyonu (override)
+const originalRender = render;
+window.render = function() {
+  originalRender();
+  renderHeaderAndNav();
+};
+render = window.render;
+
+// Başlatma
+loadFromLocal();
+saveToLocal();
+render();
+
+// Döviz kurunu çek
+(async () => {
+  try { const res = await fetch("https://api.frankfurter.app/latest?from=TRY&to=AUD"); const data = await res.json(); if (data.rates?.AUD) rate = data.rates.AUD; render(); } catch(e) {}
+})();
 </script>
 </body>
 </html>
