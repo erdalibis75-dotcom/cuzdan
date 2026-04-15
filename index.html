@@ -35,574 +35,317 @@
   .toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#059669;color:white;padding:10px 20px;border-radius:40px;font-size:14px;font-weight:600;z-index:300;max-width:90%;text-align:center}
   .toast-error{background:#dc2626}
   .hidden{display:none}
+  
+  /* Kişi kartları yan yana için grid */
+  .person-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+  .person-card{background:#121216;border:1px solid #1f1f24;border-radius:20px;padding:14px 8px;text-align:center;cursor:pointer;transition:all 0.1s}
+  .person-card:active{transform:scale(0.96);background:#1a1a20}
+  .person-avatar-small{width:48px;height:48px;border-radius:30px;background:#2a2a32;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;margin:0 auto 8px}
+  .person-name{font-weight:800;font-size:14px;margin-bottom:4px}
+  .person-balance{font-size:13px;font-weight:700;font-family:monospace}
+  .person-balance-positive{color:#34d399}
+  .person-balance-negative{color:#f87171}
+  .person-save-rate{font-size:10px;color:#aaa;margin-top:4px}
+  
+  /* Son işlemler başlığı */
+  .section-title{font-size:14px;font-weight:700;margin:16px 0 12px}
 </style>
 </head>
 <body>
 <div id="app" class="container"></div>
-
 <script>
-// Sabitler
 const PEOPLE = ["Erdal", "A.A", "N.A"];
+const formatTRY=n=>new Intl.NumberFormat("tr-TR",{style:"currency",currency:"TRY",maximumFractionDigits:0}).format(n||0);
+const formatAUD=n=>new Intl.NumberFormat("en-AU",{style:"currency",currency:"AUD",minimumFractionDigits:2}).format(n||0);
+const formatDateShort=d=>d?new Date(d).toLocaleDateString("tr-TR",{day:"numeric",month:"short"}):"";
+const formatFullDate=d=>d?new Date(d).toLocaleDateString("tr-TR",{day:"numeric",month:"long",year:"numeric"}):"";
 
-const formatTRY = (n) => new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 }).format(n || 0);
-const formatAUD = (n) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 2 }).format(n || 0);
-const formatDateShort = (d) => d ? new Date(d).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }) : "";
+let txs=[],rate=0.032,currentView="home",selectedPerson=null,editId=null,filterType="all",filterPerson="all",searchText="",monthViewKey=null,toastTimeout=null;
+// Person sayfası için ek filtreler
+let personTimeFilter="all"; // all, month, year
+let personSelectedMonth="";
+let personSelectedYear="";
 
-let txs = [];
-let rate = 0.032;
-let currentView = "home";
-let selectedPerson = null;
-let editId = null;
-let filterType = "all";
-let filterPerson = "all";
-let searchText = "";
-let monthViewKey = null;
-let personTxFilter = "all";
-let personSearch = "";
-let toastTimeout = null;
+let formType="expense",formPerson="Erdal",formAmount="",formNote="",formDate=new Date().toISOString().split("T")[0];
 
-// Form elemanları
-let formType = "expense";
-let formPerson = "Erdal";
-let formAmount = "";
-let formNote = "";
-let formDate = new Date().toISOString().split("T")[0];
-
-// Örnek veri
-const SAMPLE_TXS = [
-  { id: 1, type: "income", person: "Erdal", amount: 15000, note: "Mart maaşı", date: "2026-03-01" },
-  { id: 2, type: "expense", person: "Erdal", amount: 3500, note: "Kira", date: "2026-03-03" },
-  { id: 3, type: "expense", person: "A.A", amount: 850, note: "Market alışverişi", date: "2026-03-05" },
-  { id: 4, type: "income", person: "A.A", amount: 2200, note: "Freelance proje", date: "2026-03-07" },
-  { id: 5, type: "expense", person: "N.A", amount: 320, note: "Ulaşım", date: "2026-03-08" },
-  { id: 6, type: "income", person: "N.A", amount: 5000, note: "Maaş", date: "2026-03-09" },
-  { id: 7, type: "expense", person: "Erdal", amount: 540, note: "Sinema + yemek", date: "2026-03-12" }
+const SAMPLE_TXS=[
+  {id:1,type:"income",person:"Erdal",amount:15000,note:"Mart maaşı",date:"2026-03-01"},
+  {id:2,type:"expense",person:"Erdal",amount:3500,note:"Kira",date:"2026-03-03"},
+  {id:3,type:"expense",person:"A.A",amount:850,note:"Market alışverişi",date:"2026-03-05"},
+  {id:4,type:"income",person:"A.A",amount:2200,note:"Freelance proje",date:"2026-03-07"},
+  {id:5,type:"expense",person:"N.A",amount:320,note:"Ulaşım",date:"2026-03-08"},
+  {id:6,type:"income",person:"N.A",amount:5000,note:"Maaş",date:"2026-03-09"},
+  {id:7,type:"expense",person:"Erdal",amount:540,note:"Sinema + yemek",date:"2026-03-12"},
+  {id:8,type:"expense",person:"A.A",amount:1200,note:"Alışveriş",date:"2026-02-15"},
+  {id:9,type:"income",person:"Erdal",amount:14500,note:"Şubat maaşı",date:"2026-02-01"},
+  {id:10,type:"expense",person:"N.A",amount:450,note:"Yemek",date:"2026-01-20"}
 ];
 
-// Helper fonksiyonlar
-function showToast(msg, isError = false) {
-  const toastEl = document.getElementById("toast");
-  if (toastTimeout) clearTimeout(toastTimeout);
-  toastEl.textContent = msg;
-  toastEl.className = `toast ${isError ? "toast-error" : ""}`;
-  toastEl.classList.remove("hidden");
-  toastTimeout = setTimeout(() => toastEl.classList.add("hidden"), 3000);
+function showToast(msg,isErr=false){const t=document.getElementById("toast");toastTimeout&&clearTimeout(toastTimeout);t.textContent=msg;t.className=`toast ${isErr?"toast-error":""}`;t.classList.remove("hidden");toastTimeout=setTimeout(()=>t.classList.add("hidden"),3000);}
+function save(){localStorage.setItem("wallet_data_v4",JSON.stringify(txs));}
+function load(){try{const s=localStorage.getItem("wallet_data_v4");if(s){const p=JSON.parse(s);if(Array.isArray(p)&&p.length){txs=p;return}}}catch(e){}txs=JSON.parse(JSON.stringify(SAMPLE_TXS));}
+function totalInc(){return txs.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);}
+function totalExp(){return txs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);}
+function balance(){return totalInc()-totalExp();}
+function toAUD(n){return(n||0)*rate;}
+function personStats(){return PEOPLE.map(p=>{const inc=txs.filter(t=>t.person===p&&t.type==="income").reduce((s,t)=>s+t.amount,0);const exp=txs.filter(t=>t.person===p&&t.type==="expense").reduce((s,t)=>s+t.amount,0);return{name:p,income:inc,expense:exp,balance:inc-exp};});}
+function monthMap(){const m={};txs.forEach(t=>{if(!t.date)return;const d=new Date(t.date),key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;if(!m[key])m[key]={inc:0,exp:0,label:d.toLocaleDateString("tr-TR",{month:"long",year:"numeric"}),transactions:[]};m[key][t.type==="income"?"inc":"exp"]+=t.amount;m[key].transactions.push(t);});return m;}
+function filteredHome(){return txs.filter(t=>{(filterType!=="all"&&t.type!==filterType)||(filterPerson!=="all"&&t.person!==filterPerson)||(searchText.trim()!==""&&!(t.note||"").toLowerCase().includes(searchText.toLowerCase()))?false:true}).sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,10);}
+function escapeHtml(str){if(!str)return"";return str.replace(/[&<>]/g,function(m){if(m==="&")return"&amp;";if(m==="<")return"&lt;";if(m===">")return"&gt;";return m;});}
+
+// Person sayfası için filtreleme
+function getPersonFilteredTxs(){
+  if(!selectedPerson) return [];
+  let filtered = txs.filter(t=>t.person===selectedPerson);
+  const now = new Date();
+  if(personTimeFilter==="month"){
+    const currentMonth = String(now.getMonth()+1).padStart(2,"0");
+    const currentYear = now.getFullYear();
+    filtered = filtered.filter(t=>{
+      const d = new Date(t.date);
+      return d.getMonth()+1 == currentMonth && d.getFullYear() == currentYear;
+    });
+  } else if(personTimeFilter==="year"){
+    const currentYear = now.getFullYear();
+    filtered = filtered.filter(t=>new Date(t.date).getFullYear() == currentYear);
+  } else if(personTimeFilter==="custom" && personSelectedMonth && personSelectedYear){
+    filtered = filtered.filter(t=>{
+      const d = new Date(t.date);
+      return d.getMonth()+1 == parseInt(personSelectedMonth) && d.getFullYear() == parseInt(personSelectedYear);
+    });
+  }
+  return filtered.sort((a,b)=>new Date(b.date)-new Date(a.date));
 }
 
-function saveToLocal() {
-  localStorage.setItem("wallet_data_v2", JSON.stringify(txs));
-}
-
-function loadFromLocal() {
-  try {
-    const saved = localStorage.getItem("wallet_data_v2");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        txs = parsed;
-        return;
-      }
-    }
-  } catch(e) {}
-  txs = JSON.parse(JSON.stringify(SAMPLE_TXS));
-}
-
-// Hesaplamalar
-function getTotalIncome() { return txs.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0); }
-function getTotalExpense() { return txs.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0); }
-function getBalance() { return getTotalIncome() - getTotalExpense(); }
-function toAUD(n) { return (n || 0) * rate; }
-
-function getPersonStats() {
-  return PEOPLE.map(p => {
-    const inc = txs.filter(t => t.person === p && t.type === "income").reduce((s, t) => s + t.amount, 0);
-    const exp = txs.filter(t => t.person === p && t.type === "expense").reduce((s, t) => s + t.amount, 0);
-    return { name: p, income: inc, expense: exp, balance: inc - exp };
-  });
-}
-
-function getMonthMap() {
-  const map = {};
-  txs.forEach(t => {
-    if (!t.date) return;
+function getAvailableMonthsForPerson(){
+  if(!selectedPerson) return [];
+  const monthsSet = new Set();
+  txs.filter(t=>t.person===selectedPerson).forEach(t=>{
     const d = new Date(t.date);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    if (!map[key]) map[key] = { inc: 0, exp: 0, label: d.toLocaleDateString("tr-TR", { month: "long", year: "numeric" }), transactions: [] };
-    map[key][t.type === "income" ? "inc" : "exp"] += t.amount;
-    map[key].transactions.push(t);
+    const key = `${d.getFullYear()}-${d.getMonth()+1}`;
+    monthsSet.add(key);
   });
-  return map;
+  return Array.from(monthsSet).sort().reverse().map(key=>{
+    const [year,month] = key.split("-");
+    return {year,month,label:new Date(year,month-1).toLocaleDateString("tr-TR",{month:"long",year:"numeric"})};
+  });
 }
 
-function getFilteredHome() {
-  return txs.filter(t => {
-    if (filterType !== "all" && t.type !== filterType) return false;
-    if (filterPerson !== "all" && t.person !== filterPerson) return false;
-    if (searchText.trim() !== "" && !(t.note || "").toLowerCase().includes(searchText.toLowerCase())) return false;
-    return true;
-  }).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 20);
+function render(){const app=document.getElementById("app");if(!app)return;if(currentView==="home")app.innerHTML=renderHome();else if(currentView==="add")app.innerHTML=renderAdd();else if(currentView==="person")app.innerHTML=renderPerson();else if(currentView==="month")app.innerHTML=renderMonth();attachEvents();renderHeaderNav();}
+
+function renderHome(){
+  const ti=totalInc(),te=totalExp(),bal=balance(),ps=personStats(),fh=filteredHome();
+  return `<div class="slide-up" style="padding:0 18px">
+    <div class="card" style="margin-bottom:24px;background:linear-gradient(135deg,#17132a,#0f0f17)">
+      <div style="font-size:11px;font-weight:600;color:#c4b5fd">TOPLAM BAKİYE</div>
+      <div style="font-size:36px;font-weight:800;font-family:monospace;color:${bal>=0?"#c4b5fd":"#ff9f8f"}">${formatTRY(bal)}</div>
+      <div class="aud-badge" style="background:#2a1e44;margin-top:5px">🇦🇺 ${formatAUD(toAUD(bal))}</div>
+      <div style="display:flex;gap:20px;margin-top:16px">
+        <div><div style="font-size:10px;color:#aaa">GELİR</div><div style="font-weight:800;color:#34d399">${formatTRY(ti)}</div><div class="aud-badge" style="margin-top:2px">A$ ${toAUD(ti).toFixed(2)}</div></div>
+        <div><div style="font-size:10px;color:#aaa">GİDER</div><div style="font-weight:800;color:#f87171">${formatTRY(te)}</div><div class="aud-badge" style="margin-top:2px">A$ ${toAUD(te).toFixed(2)}</div></div>
+      </div>
+    </div>
+    <div class="person-grid">
+      ${ps.map(p=>{
+        const saveRate=p.income>0?Math.min(100,(p.balance/p.income)*100):0;
+        const balanceClass=p.balance>=0?"person-balance-positive":"person-balance-negative";
+        return `<div class="person-card" data-action="person" data-name="${p.name}">
+          <div class="person-avatar-small">${p.name[0]}</div>
+          <div class="person-name">${p.name}</div>
+          <div class="person-balance ${balanceClass}">${formatTRY(p.balance)}</div>
+          <div class="person-save-rate">tasarruf %${Math.round(saveRate)}</div>
+          <div class="progress-bar" style="margin-top:8px"><div class="progress-fill" style="width:${saveRate}%"></div></div>
+        </div>`;
+      }).join("")}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <select id="filterTypeSelect" class="chip"><option value="all" ${filterType==="all"?"selected":""}>📌 Tümü</option><option value="income" ${filterType==="income"?"selected":""}>💰 Gelir</option><option value="expense" ${filterType==="expense"?"selected":""}>💸 Gider</option></select>
+      <select id="filterPersonSelect" class="chip"><option value="all" ${filterPerson==="all"?"selected":""}>👤 Tüm kişiler</option>${PEOPLE.map(p=>`<option value="${p}" ${filterPerson===p?"selected":""}>${p}</option>`).join("")}</select>
+    </div>
+    <input type="text" id="searchInput" class="input-field" placeholder="🔍 Not içinde ara" value="${escapeHtml(searchText)}" style="margin-bottom:16px">
+    <div class="section-title">📋 SON 10 İŞLEM</div>
+    ${fh.map(tx=>`<div class="tx-row" data-action="detail" data-id="${tx.id}">
+      <div style="display:flex;gap:12px;align-items:center;flex:1">
+        <div style="width:42px;height:42px;border-radius:30px;background:${tx.type==="income"?"#0e2a1f":"#2c1a1a"};display:flex;align-items:center;justify-content:center;font-size:20px">${tx.type==="income"?"📈":"💸"}</div>
+        <div><div style="font-weight:700">${escapeHtml(tx.note)||(tx.type==="income"?"Gelir":"Harcama")}</div><div style="font-size:11px;color:#999;display:flex;gap:6px;margin-top:4px"><span>${tx.person}</span><span>${formatDateShort(tx.date)}</span></div></div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:800;font-family:monospace;color:${tx.type==="income"?"#34d399":"#f87171"}">${tx.type==="income"?`+${formatTRY(tx.amount)}`:`-${formatTRY(tx.amount)}`}</div>
+        <div class="aud-badge" style="font-size:9px;margin-top:3px">🇦🇺 ${formatAUD(toAUD(tx.amount))}</div>
+      </div>
+    </div>`).join("")}
+    ${fh.length===0?'<div style="text-align:center;padding:40px;color:#555">İşlem yok. + ile ekleyin</div>':''}
+    <div style="margin-top:24px;margin-bottom:30px">
+      <div class="section-title">📆 Aylık Özetler</div>
+      <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:8px">
+        ${Object.keys(monthMap()).sort().reverse().map(key=>{const m=monthMap()[key];return`<div class="card" style="padding:10px 16px;min-width:110px;cursor:pointer" data-action="month" data-key="${key}"><div style="font-weight:800;font-size:13px">${m.label.split(" ")[0]}</div><div style="font-size:12px"><span style="color:#34d399">${formatTRY(m.inc)}</span> / <span style="color:#f87171">${formatTRY(m.exp)}</span></div><div style="font-size:11px;color:#aaa">${formatTRY(m.inc-m.exp)}</div></div>`;}).join("")}
+      </div>
+    </div>
+  </div>`;
 }
 
-// Render fonksiyonları
-function render() {
-  const app = document.getElementById("app");
-  if (!app) return;
+function renderAdd(){
+  return `<div class="slide-up" style="padding:0 18px"><div class="card" style="padding:26px">
+    <h3 style="margin-bottom:16px">${editId?"✏️ Düzenle":"➕ Yeni İşlem"}</h3>
+    <select id="formType" class="input-field"><option value="income" ${formType==="income"?"selected":""}>💰 Gelir</option><option value="expense" ${formType==="expense"?"selected":""}>💸 Gider</option></select>
+    <select id="formPerson" class="input-field">${PEOPLE.map(p=>`<option value="${p}" ${formPerson===p?"selected":""}>${p}</option>`).join("")}</select>
+    <input type="number" id="formAmount" class="input-field" placeholder="₺ Tutar" value="${formAmount}">
+    <input type="text" id="formNote" class="input-field" placeholder="📝 Not" value="${escapeHtml(formNote)}">
+    <input type="date" id="formDate" class="input-field" value="${formDate}">
+    <div style="display:flex;gap:12px;margin-top:16px">
+      <button id="saveBtn" class="btn" style="flex:1;background:#7c3aed;padding:14px;border-radius:60px">Kaydet</button>
+      <button id="cancelBtn" class="btn" style="flex:1;background:#2a2a32;padding:14px;border-radius:60px">İptal</button>
+    </div>
+  </div></div>`;
+}
+
+function renderPerson(){
+  if(!selectedPerson) return "";
+  const ps=personStats(),pStat=ps.find(p=>p.name===selectedPerson);
+  const filtered = getPersonFilteredTxs();
+  const incTotal = filtered.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
+  const expTotal = filtered.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+  const balTotal = incTotal - expTotal;
+  const months = getAvailableMonthsForPerson();
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = String(now.getMonth()+1).padStart(2,"0");
   
-  if (currentView === "home") {
-    app.innerHTML = renderHome();
-  } else if (currentView === "add") {
-    app.innerHTML = renderAdd();
-  } else if (currentView === "person") {
-    app.innerHTML = renderPerson();
-  } else if (currentView === "month") {
-    app.innerHTML = renderMonth();
+  return `<div class="slide-up" style="padding:0 18px">
+    <button id="backHomeBtn" class="btn" style="background:#25252e;padding:8px 18px;border-radius:40px;margin-bottom:16px">← Ana Sayfa</button>
+    <div style="display:flex;gap:14px;align-items:center;margin-bottom:20px">
+      <div class="avatar">${selectedPerson[0]}</div>
+      <div><div style="font-weight:800;font-size:22px">${selectedPerson}</div><div style="color:#34d399">Toplam Net ${formatTRY(pStat?.balance||0)}</div></div>
+    </div>
+    
+    <!-- Zaman Filtresi -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;color:#aaa;margin-bottom:8px">⏱️ Zaman Aralığı</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button data-timefilter="all" class="chip ${personTimeFilter==="all"?"chip-active":""}" style="${personTimeFilter==="all"?"background:#7c3aed;color:white":""}">📅 Tüm Zamanlar</button>
+        <button data-timefilter="month" class="chip ${personTimeFilter==="month"?"chip-active":""}" style="${personTimeFilter==="month"?"background:#7c3aed;color:white":""}">📆 Bu Ay</button>
+        <button data-timefilter="year" class="chip ${personTimeFilter==="year"?"chip-active":""}" style="${personTimeFilter==="year"?"background:#7c3aed;color:white":""}">📅 Bu Yıl</button>
+        <button data-timefilter="custom" class="chip ${personTimeFilter==="custom"?"chip-active":""}" style="${personTimeFilter==="custom"?"background:#7c3aed;color:white":""}">📆 Seçili Ay</button>
+      </div>
+    </div>
+    
+    ${personTimeFilter==="custom" ? `
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <select id="personYearSelect" class="chip" style="background:#1e1e24">
+        <option value="">Yıl</option>
+        ${[...new Set(txs.filter(t=>t.person===selectedPerson).map(t=>new Date(t.date).getFullYear()))].sort((a,b)=>b-a).map(y=>`<option value="${y}" ${personSelectedYear==y?"selected":""}>${y}</option>`).join("")}
+      </select>
+      <select id="personMonthSelect" class="chip" style="background:#1e1e24">
+        <option value="">Ay</option>
+        <option value="01" ${personSelectedMonth==="01"?"selected":""}>Ocak</option>
+        <option value="02" ${personSelectedMonth==="02"?"selected":""}>Şubat</option>
+        <option value="03" ${personSelectedMonth==="03"?"selected":""}>Mart</option>
+        <option value="04" ${personSelectedMonth==="04"?"selected":""}>Nisan</option>
+        <option value="05" ${personSelectedMonth==="05"?"selected":""}>Mayıs</option>
+        <option value="06" ${personSelectedMonth==="06"?"selected":""}>Haziran</option>
+        <option value="07" ${personSelectedMonth==="07"?"selected":""}>Temmuz</option>
+        <option value="08" ${personSelectedMonth==="08"?"selected":""}>Ağustos</option>
+        <option value="09" ${personSelectedMonth==="09"?"selected":""}>Eylül</option>
+        <option value="10" ${personSelectedMonth==="10"?"selected":""}>Ekim</option>
+        <option value="11" ${personSelectedMonth==="11"?"selected":""}>Kasım</option>
+        <option value="12" ${personSelectedMonth==="12"?"selected":""}>Aralık</option>
+      </select>
+      <button id="applyCustomFilter" class="btn" style="background:#7c3aed;padding:6px 14px;border-radius:40px">Uygula</button>
+    </div>
+    ` : ""}
+     <!-- Filtre Sonucu Özet -->
+    <div style="display:flex;gap:12px;margin-bottom:16px">
+      <div class="card" style="flex:1;padding:12px;text-align:center"><div style="font-size:10px;color:#aaa">GELİR</div><div style="font-weight:800;color:#34d399">${formatTRY(incTotal)}</div><div class="aud-badge" style="justify-content:center;margin-top:4px">A$ ${toAUD(incTotal).toFixed(2)}</div></div>
+      <div class="card" style="flex:1;padding:12px;text-align:center"><div style="font-size:10px;color:#aaa">GİDER</div><div style="font-weight:800;color:#f87171">${formatTRY(expTotal)}</div><div class="aud-badge" style="justify-content:center;margin-top:4px">A$ ${toAUD(expTotal).toFixed(2)}</div></div>
+      <div class="card" style="flex:1;padding:12px;text-align:center"><div style="font-size:10px;color:#aaa">NET</div><div style="font-weight:800;color:${balTotal>=0?"#34d399":"#f87171"}">${formatTRY(balTotal)}</div></div>
+    </div>
+    
+    <div style="display:flex;gap:12px;margin-bottom:16px">
+      <select id="personTxFilter" class="chip">
+        <option value="all" ${personTxFilter==="all"?"selected":""}>Tüm işlemler</option>
+        <option value="income" ${personTxFilter==="income"?"selected":""}>Gelirler</option>
+        <option value="expense" ${personTxFilter==="expense"?"selected":""}>Giderler</option>
+      </select>
+      <input type="text" id="personSearch" class="input-field" style="padding:8px 14px;margin:0" placeholder="🔍 Not ara" value="${escapeHtml(personSearch)}">
+    </div>
+    
+    ${filtered.filter(t=>personTxFilter==="all"||t.type===personTxFilter).filter(t=>personSearch===""||(t.note||"").toLowerCase().includes(personSearch.toLowerCase())).map(tx=>`<div class="tx-row" data-action="detail" data-id="${tx.id}">
+      <div style="display:flex;gap:12px;align-items:center;flex:1">
+        <div style="width:42px;height:42px;border-radius:30px;background:${tx.type==="income"?"#0e2a1f":"#2c1a1a"};display:flex;align-items:center;justify-content:center;font-size:20px">${tx.type==="income"?"📈":"💸"}</div>
+        <div><div style="font-weight:700">${escapeHtml(tx.note)||(tx.type==="income"?"Gelir":"Harcama")}</div><div style="font-size:11px;color:#999;margin-top:4px">${formatFullDate(tx.date)}</div></div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:800;font-family:monospace;color:${tx.type==="income"?"#34d399":"#f87171"}">${tx.type==="income"?`+${formatTRY(tx.amount)}`:`-${formatTRY(tx.amount)}`}</div>
+        <div class="aud-badge" style="font-size:9px;margin-top:3px">🇦🇺 ${formatAUD(toAUD(tx.amount))}</div>
+      </div>
+    </div>`).join("")}
+    ${filtered.length===0?'<div style="text-align:center;padding:40px;color:#666">Bu dönemde kayıt yok</div>':''}
+    <button id="addFromPersonBtn" class="floating-btn" style="position:relative;margin-top:20px;width:100%;border-radius:60px;background:#7c3aed">+ Yeni İşlem</button>
+  </div>`;
+}
+
+function renderMonth(){const mm=monthMap(),data=monthViewKey?mm[monthViewKey]:null;if(!data)return"";return`<div class="slide-up" style="padding:0 18px"><button id="backHomeBtn2" class="btn" style="background:#25252e;padding:8px 18px;border-radius:40px;margin-bottom:16px">← Geri</button><div class="card" style="padding:20px;text-align:center;margin-bottom:20px"><div style="font-size:20px;font-weight:800">${data.label}</div><div style="display:flex;justify-content:center;gap:20px;margin-top:12px"><div><div>💰 Gelir</div><div style="font-weight:800;color:#34d399">${formatTRY(data.inc)}</div></div><div><div>💸 Gider</div><div style="font-weight:800;color:#f87171">${formatTRY(data.exp)}</div></div><div><div>📌 Net</div><div style="font-weight:800">${formatTRY(data.inc-data.exp)}</div></div></div></div><div style="font-weight:700;margin-bottom:12px">📅 Ayın işlemleri</div>${data.transactions.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(tx=>`<div class="tx-row" data-action="detail" data-id="${tx.id}"><div style="display:flex;gap:12px;align-items:center;flex:1"><div style="width:42px;height:42px;border-radius:30px;background:${tx.type==="income"?"#0e2a1f":"#2c1a1a"};display:flex;align-items:center;justify-content:center;font-size:20px">${tx.type==="income"?"📈":"💸"}</div><div><div style="font-weight:700">${escapeHtml(tx.note)||(tx.type==="income"?"Gelir":"Harcama")}</div><div style="font-size:11px;color:#999;margin-top:4px">${tx.person} • ${formatFullDate(tx.date)}</div></div></div><div style="text-align:right"><div style="font-weight:800;font-family:monospace;color:${tx.type==="income"?"#34d399":"#f87171"}">${tx.type==="income"?`+${formatTRY(tx.amount)}`:`-${formatTRY(tx.amount)}`}</div><div class="aud-badge" style="font-size:9px;margin-top:3px">🇦🇺 ${formatAUD(toAUD(tx.amount))}</div></div></div>`).join("")}</div>`;}
+
+function attachEvents(){
+  // Ana sayfa - kişi kartları
+  document.querySelectorAll("[data-action='person']").forEach(el=>{el.onclick=()=>{selectedPerson=el.dataset.name;personTimeFilter="all";personSelectedMonth="";personSelectedYear="";personTxFilter="all";personSearch="";currentView="person";render();};});
+  document.querySelectorAll("[data-action='month']").forEach(el=>{el.onclick=()=>{monthViewKey=el.dataset.key;currentView="month";render();};});
+  document.querySelectorAll("[data-action='detail']").forEach(el=>{el.onclick=()=>showDetail(parseInt(el.dataset.id));});
+  
+  // Filtreler
+  const fts=document.getElementById("filterTypeSelect");if(fts)fts.onchange=e=>{filterType=e.target.value;render();};
+  const fps=document.getElementById("filterPersonSelect");if(fps)fps.onchange=e=>{filterPerson=e.target.value;render();};
+  const si=document.getElementById("searchInput");if(si)si.oninput=e=>{searchText=e.target.value;render();};
+  
+  // Form işlemleri
+  const sb=document.getElementById("saveBtn");if(sb)sb.onclick=()=>{if(!formAmount||!formPerson){showToast("Lütfen tutar ve kişi seçin!",true);return;}const an=parseFloat(formAmount);if(isNaN(an)||an<=0){showToast("Geçerli tutar girin!",true);return;}const nt={type:formType,person:formPerson,amount:an,note:formNote,date:formDate,id:editId?editId:Date.now()};if(editId){const idx=txs.findIndex(t=>t.id===editId);if(idx!==-1)txs[idx]=nt;}else txs.push(nt);save();currentView="home";editId=null;formAmount="";formNote="";showToast(editId?"✏️ Düzenlendi":"➕ Eklendi");render();};
+  const cb=document.getElementById("cancelBtn");if(cb)cb.onclick=()=>{currentView="home";render();};
+  const ft=document.getElementById("formType");if(ft)ft.onchange=e=>{formType=e.target.value;};
+  const fp=document.getElementById("formPerson");if(fp)fp.onchange=e=>{formPerson=e.target.value;};
+  const fa=document.getElementById("formAmount");if(fa)fa.oninput=e=>{formAmount=e.target.value;};
+  const fn=document.getElementById("formNote");if(fn)fn.oninput=e=>{formNote=e.target.value;};
+  const fd=document.getElementById("formDate");if(fd)fd.onchange=e=>{formDate=e.target.value;};
+  
+  // Person sayfası butonları
+  const bhb=document.getElementById("backHomeBtn");if(bhb)bhb.onclick=()=>{currentView="home";render();};
+  const bhb2=document.getElementById("backHomeBtn2");if(bhb2)bhb2.onclick=()=>{currentView="home";render();};
+  const ptf=document.getElementById("personTxFilter");if(ptf)ptf.onchange=e=>{personTxFilter=e.target.value;render();};
+  const psr=document.getElementById("personSearch");if(psr)psr.oninput=e=>{personSearch=e.target.value;render();};
+  const afp=document.getElementById("addFromPersonBtn");if(afp)afp.onclick=()=>{formType="expense";formPerson=selectedPerson;formAmount="";formNote="";formDate=new Date().toISOString().split("T")[0];editId=null;currentView="add";render();};
+  
+  // Person zaman filtreleri
+  document.querySelectorAll("[data-timefilter]").forEach(el=>{
+    el.onclick=()=>{personTimeFilter=el.dataset.timefilter;personSelectedMonth="";personSelectedYear="";render();};
+  });
+  const pyear=document.getElementById("personYearSelect");if(pyear)pyear.onchange=e=>{personSelectedYear=e.target.value;};
+  const pmonth=document.getElementById("personMonthSelect");if(pmonth)pmonth.onchange=e=>{personSelectedMonth=e.target.value;};
+  const applyBtn=document.getElementById("applyCustomFilter");if(applyBtn)applyBtn.onclick=()=>{if(personSelectedYear&&personSelectedMonth){render();}};
+}
+
+function showDetail(id){const tx=txs.find(t=>t.id===id);if(!tx)return;const modal=document.createElement("div");modal.className="modal-overlay";modal.innerHTML=`<div class="modal-card"><div style="font-weight:800;font-size:22px">${tx.type==="income"?"Gelir Detayı":"Gider Detayı"}</div><div style="font-size:32px;font-family:monospace;font-weight:800;margin:10px 0;color:${tx.type==="income"?"#34d399":"#f87171"}">${formatTRY(tx.amount)}</div><div class="aud-badge" style="margin-bottom:14px">🇦🇺 ${formatAUD(toAUD(tx.amount))}</div><div style="background:#1c1c24;border-radius:24px;padding:16px;margin-bottom:20px"><div>👤 Kişi: ${tx.person}</div><div class="mt-2">📅 Tarih: ${formatFullDate(tx.date)}</div><div class="mt-2">📝 Not: ${tx.note||"—"}</div></div><div style="display:flex;gap:12px"><button id="modalEditBtn" class="btn" style="flex:1;background:#2c5f5f;padding:12px;border-radius:40px">✏️ Düzenle</button><button id="modalDeleteBtn" class="btn" style="flex:1;background:#6b2e2e;padding:12px;border-radius:40px">🗑️ Sil</button><button id="modalCloseBtn" class="btn" style="background:#2c2c36;padding:12px 18px;border-radius:40px">Kapat</button></div></div>`;document.body.appendChild(modal);modal.querySelector("#modalCloseBtn").onclick=()=>modal.remove();modal.querySelector("#modalEditBtn").onclick=()=>{editId=tx.id;formType=tx.type;formPerson=tx.person;formAmount=String(tx.amount);formNote=tx.note||"";formDate=tx.date;currentView="add";modal.remove();render();};modal.querySelector("#modalDeleteBtn").onclick=()=>{if(confirm("Silinsin mi?")){txs=txs.filter(t=>t.id!==id);save();modal.remove();showToast("🗑️ Silindi");render();}};modal.onclick=e=>{if(e.target===modal)modal.remove();};}
+
+function renderHeaderNav(){
+  if(currentView!=="add"){
+    const oldNav=document.querySelector(".bottom-nav");if(oldNav)oldNav.remove();
+    const app=document.getElementById("app");
+    const header=`<div style="padding:20px 18px 10px"><div class="flex-between"><div><div style="font-size:10px;font-weight:800;color:#a78bfa;letter-spacing:1px">BÜTÇE ASİSTANI</div><div style="font-size:22px;font-weight:800">${currentView==="person"&&selectedPerson?`${selectedPerson} · Detay`:currentView==="month"?"📅 Ay Özeti":"Cüzdan"}</div></div><div style="display:flex;gap:6px;background:#15151c;padding:5px 12px;border-radius:40px"><span>🇦🇺</span><span style="font-family:monospace;font-size:12px">A$${rate.toFixed(5)}</span><button id="refreshRateBtn" class="btn" style="font-size:12px">⟳</button></div></div></div>`;
+    const nav=`<div class="bottom-nav"><button id="navHome" class="nav-btn ${currentView==="home"?"nav-active":""}"><span style="font-size:22px">🏠</span><span>Ana Sayfa</span></button><button id="navAdd" class="nav-btn"><span style="font-size:22px">➕</span><span>Ekle</span></button><button id="navExport" class="nav-btn"><span style="font-size:22px">💾</span><span>Yedek Al</span></button><label id="navImportLabel" class="nav-btn" style="cursor:pointer"><span style="font-size:22px">📂</span><span>Yedek Yükle</span><input type="file" id="navImport" accept=".json" style="display:none"></label></div>`;
+    const fab=currentView!=="add"?`<button id="floatingAddBtn" class="floating-btn">+</button>`:"";
+    const toastHtml=`<div id="toast" class="toast hidden"></div>`;
+    app.insertAdjacentHTML("afterbegin",header);app.insertAdjacentHTML("beforeend",nav);app.insertAdjacentHTML("beforeend",fab);app.insertAdjacentHTML("beforeend",toastHtml);
+    document.getElementById("navHome")?.addEventListener("click",()=>{currentView="home";render();});
+    document.getElementById("navAdd")?.addEventListener("click",()=>{editId=null;formAmount="";formNote="";formType="expense";formPerson="Erdal";formDate=new Date().toISOString().split("T")[0];currentView="add";render();});
+    document.getElementById("navExport")?.addEventListener("click",()=>{const d=JSON.stringify(txs,null,2),b=new Blob([d],{type:"application/json"}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download=`cuzdan_${Date.now()}.json`;a.click();URL.revokeObjectURL(u);showToast("✅ Yedek alındı!");});
+    document.getElementById("navImport")?.addEventListener("change",(e)=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{const imp=JSON.parse(ev.target.result);if(Array.isArray(imp)){txs=imp;save();showToast(`✅ ${imp.length} kayıt yüklendi!`);currentView="home";render();}else showToast("❌ Geçersiz format!",true);}catch(err){showToast("❌ Dosya okunamadı!",true);}};r.readAsText(f);e.target.value="";});
+    document.getElementById("floatingAddBtn")?.addEventListener("click",()=>{editId=null;formAmount="";formNote="";formType="expense";formPerson="Erdal";formDate=new Date().toISOString().split("T")[0];currentView="add";render();});
+    document.getElementById("refreshRateBtn")?.addEventListener("click",async()=>{try{const r=await fetch("https://api.frankfurter.app/latest?from=TRY&to=AUD"),d=await r.json();if(d.rates?.AUD)rate=d.rates.AUD;showToast("🔄 Kur güncellendi");render();}catch(e){showToast("Kur alınamadı",true);}});
   }
-  
-  // Event listeners ekle
-  attachEvents();
 }
 
-function renderHome() {
-  const totalIncome = getTotalIncome();
-  const totalExpense = getTotalExpense();
-  const balance = getBalance();
-  const personStats = getPersonStats();
-  const monthMap = getMonthMap();
-  const monthKeys = Object.keys(monthMap).sort().reverse();
-  const filteredHome = getFilteredHome();
-  
-  return `
-    <div class="slide-up" style="padding:0 18px">
-      <div class="card" style="margin-bottom:24px;background:linear-gradient(135deg,#17132a,#0f0f17)">
-        <div style="font-size:11px;font-weight:600;color:#c4b5fd">TOPLAM BAKİYE</div>
-        <div style="font-size:36px;font-weight:800;font-family:monospace;color:${balance>=0?"#c4b5fd":"#ff9f8f"}">${formatTRY(balance)}</div>
-        <div class="aud-badge" style="background:#2a1e44;margin-top:5px">🇦🇺 ${formatAUD(toAUD(balance))}</div>
-        <div style="display:flex;gap:20px;margin-top:16px">
-          <div><div style="font-size:10px;color:#aaa">GELİR</div><div style="font-weight:800;color:#34d399">${formatTRY(totalIncome)}</div><div class="aud-badge" style="margin-top:2px">A$ ${toAUD(totalIncome).toFixed(2)}</div></div>
-          <div><div style="font-size:10px;color:#aaa">GİDER</div><div style="font-weight:800;color:#f87171">${formatTRY(totalExpense)}</div><div class="aud-badge" style="margin-top:2px">A$ ${toAUD(totalExpense).toFixed(2)}</div></div>
-        </div>
-      </div>
-      
-      <div style="margin-bottom:20px">
-        <div style="font-size:14px;font-weight:700;margin-bottom:12px">👥 Kişi Bazında</div>
-        ${personStats.map(p => {
-          const saveRate = p.income > 0 ? Math.min(100, (p.balance / p.income) * 100) : 0;
-          return `
-            <div class="card" style="margin-bottom:10px;cursor:pointer" data-action="person" data-name="${p.name}">
-              <div class="flex-between">
-                <div><span style="font-weight:800">${p.name}</span><div style="font-size:11px;color:#aaa">tasarruf %${Math.round(saveRate)}</div></div>
-                <div style="text-align:right"><div style="font-weight:700">${formatTRY(p.balance)}</div><div class="aud-badge">A$ ${toAUD(p.balance).toFixed(2)}</div></div>
-              </div>
-              <div class="progress-bar"><div class="progress-fill" style="width:${saveRate}%"></div></div>
-            </div>
-          `;
-        }).join("")}
-      </div>
-      
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
-        <select id="filterTypeSelect" class="chip">
-          <option value="all" ${filterType==="all"?"selected":""}>📌 Tümü</option>
-          <option value="income" ${filterType==="income"?"selected":""}>💰 Gelir</option>
-          <option value="expense" ${filterType==="expense"?"selected":""}>💸 Gider</option>
-        </select>
-        <select id="filterPersonSelect" class="chip">
-          <option value="all" ${filterPerson==="all"?"selected":""}>👤 Tüm kişiler</option>
-          ${PEOPLE.map(p => `<option value="${p}" ${filterPerson===p?"selected":""}>${p}</option>`).join("")}
-        </select>
-      </div>
-      
-      <input type="text" id="searchInput" class="input-field" placeholder="🔍 Not içinde ara (maaş, kira, market...)" value="${searchText.replace(/"/g, "&quot;")}" style="margin-bottom:16px">
-      
-      <div style="font-weight:700;margin:6px 0 8px">📋 Son İşlemler</div>
-      ${filteredHome.map(tx => `
-        <div class="tx-row" data-action="detail" data-id="${tx.id}">
-          <div style="display:flex;gap:12px;align-items:center;flex:1">
-            <div style="width:42px;height:42px;border-radius:30px;background:${tx.type==="income"?"#0e2a1f":"#2c1a1a"};display:flex;align-items:center;justify-content:center;font-size:20px">${tx.type==="income"?"📈":"💸"}</div>
-            <div><div style="font-weight:700">${escapeHtml(tx.note) || (tx.type==="income"?"Gelir":"Harcama")}</div><div style="font-size:11px;color:#999;display:flex;gap:6px;margin-top:4px"><span>${tx.person}</span><span>${formatDateShort(tx.date)}</span></div></div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-weight:800;font-family:monospace;color:${tx.type==="income"?"#34d399":"#f87171"}">${tx.type==="income"?`+${formatTRY(tx.amount)}`:`-${formatTRY(tx.amount)}`}</div>
-            <div class="aud-badge" style="font-size:9px;margin-top:3px">🇦🇺 ${formatAUD(toAUD(tx.amount))}</div>
-          </div>
-        </div>
-      `).join("")}
-      ${filteredHome.length === 0 ? '<div style="text-align:center;padding:40px;color:#555">İşlem yok. + ile ekleyin</div>' : ''}
-      
-      <div style="margin-top:24px;margin-bottom:30px">
-        <div style="font-size:14px;font-weight:700;margin-bottom:12px">📆 Aylık Özetler</div>
-        <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:8px">
-          ${monthKeys.map(key => {
-            const m = monthMap[key];
-            return `
-              <div class="card" style="padding:10px 16px;min-width:110px;cursor:pointer" data-action="month" data-key="${key}">
-                <div style="font-weight:800;font-size:13px">${m.label.split(" ")[0]}</div>
-                <div style="font-size:12px"><span style="color:#34d399">${formatTRY(m.inc)}</span> / <span style="color:#f87171">${formatTRY(m.exp)}</span></div>
-                <div style="font-size:11px;color:#aaa">${formatTRY(m.inc - m.exp)}</div>
-              </div>
-            `;
-          }).join("")}
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function renderAdd() {
-  return `
-    <div class="slide-up" style="padding:0 18px">
-      <div class="card" style="padding:26px">
-        <h3 style="margin-bottom:16px">${editId ? "✏️ Düzenle" : "➕ Yeni İşlem"}</h3>
-        <select id="formType" class="input-field">
-          <option value="income" ${formType==="income"?"selected":""}>💰 Gelir</option>
-          <option value="expense" ${formType==="expense"?"selected":""}>💸 Gider</option>
-        </select>
-        <select id="formPerson" class="input-field">
-          ${PEOPLE.map(p => `<option value="${p}" ${formPerson===p?"selected":""}>${p}</option>`).join("")}
-        </select>
-        <input type="number" id="formAmount" class="input-field" placeholder="₺ Tutar" value="${formAmount}">
-        <input type="text" id="formNote" class="input-field" placeholder="📝 Not (maaş, kira, market...)" value="${escapeHtml(formNote)}">
-        <input type="date" id="formDate" class="input-field" value="${formDate}">
-        <div style="display:flex;gap:12px;margin-top:16px">
-          <button id="saveBtn" class="btn" style="flex:1;background:#7c3aed;padding:14px;border-radius:60px">Kaydet</button>
-          <button id="cancelBtn" class="btn" style="flex:1;background:#2a2a32;padding:14px;border-radius:60px">İptal</button>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function renderPerson() {
-  if (!selectedPerson) return "";
-  const personStats = getPersonStats();
-  const pStat = personStats.find(p => p.name === selectedPerson);
-  const filtered = txs.filter(t => t.person === selectedPerson && (personTxFilter === "all" || t.type === personTxFilter))
-    .filter(t => personSearch === "" || (t.note || "").toLowerCase().includes(personSearch.toLowerCase()))
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
-  
-  return `
-    <div class="slide-up" style="padding:0 18px">
-      <button id="backHomeBtn" class="btn" style="background:#25252e;padding:8px 18px;border-radius:40px;margin-bottom:16px">← Ana Sayfa</button>
-      <div style="display:flex;gap:14px;align-items:center;margin-bottom:20px">
-        <div class="avatar">${selectedPerson[0]}</div>
-        <div><div style="font-weight:800;font-size:22px">${selectedPerson}</div><div style="color:#34d399">Net ${formatTRY(pStat?.balance || 0)}</div></div>
-      </div>
-      <div style="display:flex;gap:12px;margin-bottom:16px">
-        <select id="personTxFilter" class="chip">
-          <option value="all" ${personTxFilter==="all"?"selected":""}>Tüm işlemler</option>
-          <option value="income" ${personTxFilter==="income"?"selected":""}>Gelirler</option>
-          <option value="expense" ${personTxFilter==="expense"?"selected":""}>Giderler</option>
-        </select>
-        <input type="text" id="personSearch" class="input-field" style="padding:8px 14px;margin:0" placeholder="🔍 Not ara" value="${escapeHtml(personSearch)}">
-      </div>
-      ${filtered.map(tx => `
-        <div class="tx-row" data-action="detail" data-id="${tx.id}">
-          <div style="display:flex;gap:12px;align-items:center;flex:1">
-            <div style="width:42px;height:42px;border-radius:30px;background:${tx.type==="income"?"#0e2a1f":"#2c1a1a"};display:flex;align-items:center;justify-content:center;font-size:20px">${tx.type==="income"?"📈":"💸"}</div>
-            <div><div style="font-weight:700">${escapeHtml(tx.note) || (tx.type==="income"?"Gelir":"Harcama")}</div><div style="font-size:11px;color:#999;margin-top:4px">${formatDateShort(tx.date)}</div></div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-weight:800;font-family:monospace;color:${tx.type==="income"?"#34d399":"#f87171"}">${tx.type==="income"?`+${formatTRY(tx.amount)}`:`-${formatTRY(tx.amount)}`}</div>
-            <div class="aud-badge" style="font-size:9px;margin-top:3px">🇦🇺 ${formatAUD(toAUD(tx.amount))}</div>
-          </div>
-        </div>
-      `).join("")}
-      ${filtered.length === 0 ? '<div style="text-align:center;padding:40px;color:#666">Kayıt yok</div>' : ''}
-      <button id="addFromPersonBtn" class="floating-btn" style="position:relative;margin-top:20px;width:100%;border-radius:60px;background:#7c3aed">+ Yeni İşlem</button>
-    </div>
-  `;
-}
-
-function renderMonth() {
-  const monthMap = getMonthMap();
-  const data = monthViewKey ? monthMap[monthViewKey] : null;
-  if (!data) return "";
-  
-  return `
-    <div class="slide-up" style="padding:0 18px">
-      <button id="backHomeBtn2" class="btn" style="background:#25252e;padding:8px 18px;border-radius:40px;margin-bottom:16px">← Geri</button>
-      <div class="card" style="padding:20px;text-align:center;margin-bottom:20px">
-        <div style="font-size:20px;font-weight:800">${data.label}</div>
-        <div style="display:flex;justify-content:center;gap:20px;margin-top:12px">
-          <div><div>💰 Gelir</div><div style="font-weight:800;color:#34d399">${formatTRY(data.inc)}</div></div>
-          <div><div>💸 Gider</div><div style="font-weight:800;color:#f87171">${formatTRY(data.exp)}</div></div>
-          <div><div>📌 Net</div><div style="font-weight:800">${formatTRY(data.inc - data.exp)}</div></div>
-        </div>
-      </div>
-      <div style="font-weight:700;margin-bottom:12px">📅 Ayın işlemleri</div>
-      ${data.transactions.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(tx => `
-        <div class="tx-row" data-action="detail" data-id="${tx.id}">
-          <div style="display:flex;gap:12px;align-items:center;flex:1">
-            <div style="width:42px;height:42px;border-radius:30px;background:${tx.type==="income"?"#0e2a1f":"#2c1a1a"};display:flex;align-items:center;justify-content:center;font-size:20px">${tx.type==="income"?"📈":"💸"}</div>
-            <div><div style="font-weight:700">${escapeHtml(tx.note) || (tx.type==="income"?"Gelir":"Harcama")}</div><div style="font-size:11px;color:#999;margin-top:4px">${tx.person} • ${formatDateShort(tx.date)}</div></div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-weight:800;font-family:monospace;color:${tx.type==="income"?"#34d399":"#f87171"}">${tx.type==="income"?`+${formatTRY(tx.amount)}`:`-${formatTRY(tx.amount)}`}</div>
-            <div class="aud-badge" style="font-size:9px;margin-top:3px">🇦🇺 ${formatAUD(toAUD(tx.amount))}</div>
-          </div>
-        </div>
-      `).join("")}
-    </div>
-  `;
-}
-
-function escapeHtml(str) {
-  if (!str) return "";
-  return str.replace(/[&<>]/g, function(m) {
-    if (m === "&") return "&amp;";
-    if (m === "<") return "&lt;";
-    if (m === ">") return "&gt;";
-    return m;
-  });
-}
-
-// Event listeners
-function attachEvents() {
-  // Ana sayfa eventleri
-  const filterTypeSelect = document.getElementById("filterTypeSelect");
-  if (filterTypeSelect) filterTypeSelect.onchange = (e) => { filterType = e.target.value; render(); };
-  
-  const filterPersonSelect = document.getElementById("filterPersonSelect");
-  if (filterPersonSelect) filterPersonSelect.onchange = (e) => { filterPerson = e.target.value; render(); };
-  
-  const searchInput = document.getElementById("searchInput");
-  if (searchInput) searchInput.oninput = (e) => { searchText = e.target.value; render(); };
-  
-  // Kişi kartları
-  document.querySelectorAll("[data-action='person']").forEach(el => {
-    el.onclick = () => { selectedPerson = el.dataset.name; currentView = "person"; personTxFilter = "all"; personSearch = ""; render(); };
-  });
-  
-  // Ay kartları
-  document.querySelectorAll("[data-action='month']").forEach(el => {
-    el.onclick = () => { monthViewKey = el.dataset.key; currentView = "month"; render(); };
-  });
-  
-  // İşlem detayları
-  document.querySelectorAll("[data-action='detail']").forEach(el => {
-    el.onclick = () => showDetailModal(parseInt(el.dataset.id));
-  });
-  
-  // Add view eventleri
-  const saveBtn = document.getElementById("saveBtn");
-  if (saveBtn) saveBtn.onclick = saveTransaction;
-  
-  const cancelBtn = document.getElementById("cancelBtn");
-  if (cancelBtn) cancelBtn.onclick = () => { currentView = "home"; render(); };
-  
-  const formTypeEl = document.getElementById("formType");
-  if (formTypeEl) formTypeEl.onchange = (e) => { formType = e.target.value; };
-  
-  const formPersonEl = document.getElementById("formPerson");
-  if (formPersonEl) formPersonEl.onchange = (e) => { formPerson = e.target.value; };
-  
-  const formAmountEl = document.getElementById("formAmount");
-  if (formAmountEl) formAmountEl.oninput = (e) => { formAmount = e.target.value; };
-  
-  const formNoteEl = document.getElementById("formNote");
-  if (formNoteEl) formNoteEl.oninput = (e) => { formNote = e.target.value; };
-  
-  const formDateEl = document.getElementById("formDate");
-  if (formDateEl) formDateEl.onchange = (e) => { formDate = e.target.value; };
-  
-  // Person view eventleri
-  const backHomeBtn = document.getElementById("backHomeBtn");
-  if (backHomeBtn) backHomeBtn.onclick = () => { currentView = "home"; render(); };
-  
-  const backHomeBtn2 = document.getElementById("backHomeBtn2");
-  if (backHomeBtn2) backHomeBtn2.onclick = () => { currentView = "home"; render(); };
-  
-  const personTxFilterEl = document.getElementById("personTxFilter");
-  if (personTxFilterEl) personTxFilterEl.onchange = (e) => { personTxFilter = e.target.value; render(); };
-  
-  const personSearchEl = document.getElementById("personSearch");
-  if (personSearchEl) personSearchEl.oninput = (e) => { personSearch = e.target.value; render(); };
-  
-  const addFromPersonBtn = document.getElementById("addFromPersonBtn");
-  if (addFromPersonBtn) addFromPersonBtn.onclick = () => { openAddFromPerson(); };
-}
-
-function saveTransaction() {
-  if (!formAmount || !formPerson) {
-    showToast("Lütfen tutar ve kişi seçin!", true);
-    return;
-  }
-  const amountNum = parseFloat(formAmount);
-  if (isNaN(amountNum) || amountNum <= 0) {
-    showToast("Geçerli bir tutar girin!", true);
-    return;
-  }
-  
-  const newTx = { type: formType, person: formPerson, amount: amountNum, note: formNote, date: formDate, id: editId ? editId : Date.now() };
-  if (editId) {
-    const index = txs.findIndex(t => t.id === editId);
-    if (index !== -1) txs[index] = newTx;
-  } else {
-    txs.push(newTx);
-  }
-  saveToLocal();
-  currentView = "home";
-  editId = null;
-  formAmount = "";
-  formNote = "";
-  showToast(editId ? "✏️ İşlem düzenlendi" : "➕ Yeni işlem eklendi");
-  render();
-}
-
-function openAddFromPerson() {
-  formType = "expense";
-  formPerson = selectedPerson;
-  formAmount = "";
-  formNote = "";
-  formDate = new Date().toISOString().split("T")[0];
-  editId = null;
-  currentView = "add";
-  render();
-}
-
-function showDetailModal(id) {
-  const tx = txs.find(t => t.id === id);
-  if (!tx) return;
-  
-  const modal = document.createElement("div");
-  modal.className = "modal-overlay";
-  modal.innerHTML = `
-    <div class="modal-card">
-      <div style="font-weight:800;font-size:22px">${tx.type === "income" ? "Gelir Detayı" : "Gider Detayı"}</div>
-      <div style="font-size:32px;font-family:monospace;font-weight:800;margin:10px 0;color:${tx.type === "income" ? "#34d399" : "#f87171"}">${formatTRY(tx.amount)}</div>
-      <div class="aud-badge" style="margin-bottom:14px">🇦🇺 ${formatAUD(toAUD(tx.amount))}</div>
-      <div style="background:#1c1c24;border-radius:24px;padding:16px;margin-bottom:20px">
-        <div>👤 Kişi: ${tx.person}</div>
-        <div class="mt-2">📅 Tarih: ${new Date(tx.date).toLocaleDateString("tr-TR")}</div>
-        <div class="mt-2">📝 Not: ${tx.note || "—"}</div>
-      </div>
-      <div style="display:flex;gap:12px">
-        <button id="modalEditBtn" class="btn" style="flex:1;background:#2c5f5f;padding:12px;border-radius:40px">✏️ Düzenle</button>
-        <button id="modalDeleteBtn" class="btn" style="flex:1;background:#6b2e2e;padding:12px;border-radius:40px">🗑️ Sil</button>
-        <button id="modalCloseBtn" class="btn" style="background:#2c2c36;padding:12px 18px;border-radius:40px">Kapat</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-  
-  modal.querySelector("#modalCloseBtn").onclick = () => modal.remove();
-  modal.querySelector("#modalEditBtn").onclick = () => {
-    editId = tx.id;
-    formType = tx.type;
-    formPerson = tx.person;
-    formAmount = String(tx.amount);
-    formNote = tx.note || "";
-    formDate = tx.date;
-    currentView = "add";
-    modal.remove();
-    render();
-  };
-  modal.querySelector("#modalDeleteBtn").onclick = () => {
-    if (confirm("Bu işlemi silmek istediğinize emin misiniz?")) {
-      txs = txs.filter(t => t.id !== id);
-      saveToLocal();
-      modal.remove();
-      showToast("🗑️ İşlem silindi");
-      render();
-    }
-  };
-  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
-}
-
-// Header ve bottom nav render
-function renderHeaderAndNav() {
-  const headerHtml = currentView !== "add" ? `
-    <div style="padding:20px 18px 10px">
-      <div class="flex-between">
-        <div>
-          <div style="font-size:10px;font-weight:800;color:#a78bfa;letter-spacing:1px">BÜTÇE ASİSTANI</div>
-          <div style="font-size:22px;font-weight:800">${currentView === "person" && selectedPerson ? `${selectedPerson} · Detay` : currentView === "month" ? "📅 Ay Özeti" : "Cüzdan"}</div>
-        </div>
-        <div style="display:flex;gap:6px;background:#15151c;padding:5px 12px;border-radius:40px">
-          <span>🇦🇺</span>
-          <span style="font-family:monospace;font-size:12px">A$${rate.toFixed(5)}</span>
-          <button id="refreshRateBtn" class="btn" style="font-size:12px">⟳</button>
-        </div>
-      </div>
-    </div>
-  ` : "";
-  
-  const bottomNav = `
-    <div class="bottom-nav">
-      <button id="navHome" class="nav-btn ${currentView === "home" ? "nav-active" : ""}"><span style="font-size:22px">🏠</span><span>Ana Sayfa</span></button>
-      <button id="navAdd" class="nav-btn"><span style="font-size:22px">➕</span><span>Ekle</span></button>
-      <button id="navExport" class="nav-btn"><span style="font-size:22px">💾</span><span>Yedek Al</span></button>
-      <label id="navImportLabel" class="nav-btn" style="cursor:pointer"><span style="font-size:22px">📂</span><span>Yedek Yükle</span><input type="file" id="navImport" accept=".json" style="display:none"></label>
-    </div>
-  `;
-  
-  const floatingBtn = currentView !== "add" ? `<button id="floatingAddBtn" class="floating-btn">+</button>` : "";
-  const toastHtml = `<div id="toast" class="toast hidden"></div>`;
-  
-  const app = document.getElementById("app");
-  const existingHeader = document.querySelector(".bottom-nav");
-  if (existingHeader) existingHeader.remove();
-  
-  app.insertAdjacentHTML("afterbegin", headerHtml);
-  app.insertAdjacentHTML("beforeend", bottomNav);
-  app.insertAdjacentHTML("beforeend", floatingBtn);
-  app.insertAdjacentHTML("beforeend", toastHtml);
-  
-  // Nav eventleri
-  document.getElementById("navHome")?.addEventListener("click", () => { currentView = "home"; render(); });
-  document.getElementById("navAdd")?.addEventListener("click", () => { 
-    editId = null; formAmount = ""; formNote = ""; formType = "expense"; formPerson = "Erdal"; formDate = new Date().toISOString().split("T")[0]; currentView = "add"; render(); 
-  });
-  document.getElementById("navExport")?.addEventListener("click", () => {
-    const dataStr = JSON.stringify(txs, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `cuzdan_yedek_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast("✅ Yedek alındı!");
-  });
-  document.getElementById("navImport")?.addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const imported = JSON.parse(ev.target.result);
-        if (Array.isArray(imported)) { txs = imported; saveToLocal(); showToast(`✅ ${imported.length} kayıt yüklendi!`); currentView = "home"; render(); }
-        else showToast("❌ Geçersiz format!", true);
-      } catch(err) { showToast("❌ Dosya okunamadı!", true); }
-    };
-    reader.readAsText(file);
-    e.target.value = "";
-  });
-  document.getElementById("floatingAddBtn")?.addEventListener("click", () => {
-    editId = null; formAmount = ""; formNote = ""; formType = "expense"; formPerson = "Erdal"; formDate = new Date().toISOString().split("T")[0]; currentView = "add"; render();
-  });
-  document.getElementById("refreshRateBtn")?.addEventListener("click", async () => {
-    try { const res = await fetch("https://api.frankfurter.app/latest?from=TRY&to=AUD"); const data = await res.json(); if (data.rates?.AUD) rate = data.rates.AUD; showToast("🔄 Kur güncellendi"); render(); } catch(e) { showToast("Kur alınamadı", true); }
-  });
-}
-
-// Ana render fonksiyonu (override)
-const originalRender = render;
-window.render = function() {
-  originalRender();
-  renderHeaderAndNav();
-};
-render = window.render;
-
-// Başlatma
-loadFromLocal();
-saveToLocal();
-render();
-
-// Döviz kurunu çek
-(async () => {
-  try { const res = await fetch("https://api.frankfurter.app/latest?from=TRY&to=AUD"); const data = await res.json(); if (data.rates?.AUD) rate = data.rates.AUD; render(); } catch(e) {}
-})();
+load();save();render();
+(async()=>{try{const r=await fetch("https://api.frankfurter.app/latest?from=TRY&to=AUD"),d=await r.json();if(d.rates?.AUD)rate=d.rates.AUD;render();}catch(e){}})();
 </script>
 </body>
 </html>
+    
   
