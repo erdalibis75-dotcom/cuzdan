@@ -1,0 +1,27 @@
+{
+  "name": "EPro",
+  "short_name": "EPro",
+  "description": "Kişisel nakit/kredi kartı takibi ve not listesi",
+  "start_url": "/cuzdan/",
+  "scope": "/cuzdan/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0d0d0d",
+  "theme_color": "#0d0d0d",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%23f5c518' width='192' height='192'/><text x='50%' y='50%' font-size='110' font-weight='bold' fill='%230d0d0d' text-anchor='middle' dominant-baseline='central'>E</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect fill='%23f5c518' width='512' height='512'/><text x='50%' y='50%' font-size='290' font-weight='bold' fill='%230d0d0d' text-anchor='middle' dominant-baseline='central'>E</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity"],
+  "prefer_related_applications": false
+}
